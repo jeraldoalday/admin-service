@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { asyncHandler } from '../../common/asyncHandler.js';
+import { prisma } from '../../db/prisma.js';
 
 export const healthRouter = Router();
 
@@ -11,3 +13,15 @@ healthRouter.get('/health', (_req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+healthRouter.get(
+  '/health/ready',
+  asyncHandler(async (_req, res) => {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      res.status(200).json({ status: 'ready', database: 'up' });
+    } catch {
+      res.status(503).json({ status: 'not_ready', database: 'down' });
+    }
+  }),
+);
