@@ -1,16 +1,20 @@
-import pino from 'pino';
+import pino, { type LoggerOptions } from 'pino';
 import { config } from '../config/index.js';
 
-export const logger = pino({
+const options: LoggerOptions = {
   level: config.logLevel,
-  transport: config.isProduction
-    ? undefined
+  ...(config.isProduction
+    ? {}
     : {
-        target: 'pino-pretty',
-        options: {
-          colorize: true,
-          translateTime: 'HH:MM:ss',
-          ignore: 'pid,hostname',
+        transport: {
+          target: 'pino-pretty',
+          options: {
+            colorize: true,
+            translateTime: 'HH:MM:ss',
+            ignore: 'pid,hostname',
+          },
         },
-      },
-});
+      }),
+};
+
+export const logger = pino(options);
