@@ -5,7 +5,7 @@ import {
   paginationToSkipTake,
   type PaginatedResult,
 } from '../../common/pagination.js';
-import { Prisma } from '../../generated/prisma/client.js';
+import type { Prisma } from '../../generated/prisma/client.js';
 import type { UserRole } from '../../generated/prisma/enums.js';
 import type { ListUsersQuery, UpdateUserInput } from './user.validation.js';
 
