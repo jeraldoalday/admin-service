@@ -47,9 +47,19 @@ npm run dev             # starts the server with hot reload on :3000
 | POST   | `/auth/login`    | none   | Authenticate, returns tokens             |
 | POST   | `/auth/refresh`  | none   | Exchange a refresh token for a new pair  |
 | GET    | `/auth/me`       | bearer | Returns the authenticated user           |
+| GET    | `/users`         | admin  | List users (paginated; filter by role/isActive/search) |
+| GET    | `/users/:id`     | admin  | Get a single user                        |
+| PATCH  | `/users/:id`     | admin  | Update displayName/role/isActive         |
+| DELETE | `/users/:id`     | admin  | Delete a user                            |
+| GET    | `/audit-logs`    | admin  | List audit log entries (paginated; filter by action/targetType) |
 
 Errors are returned as `{ "error": { "code": string, "message": string, "details"?: unknown } }`
 with an appropriate HTTP status code.
+
+Admin-only routes require a bearer token for a user with `role: "ADMIN"`; the auth endpoints
+under `/auth/*` are additionally rate-limited. Admins cannot change their own role/active
+status or delete their own account (avoids locking yourself out). Updates and deletes made
+through `/users` write an entry to `/audit-logs`.
 
 ## Project layout
 
@@ -63,6 +73,8 @@ src/
   modules/
     health/             Liveness/readiness endpoints
     auth/                Register/login/refresh/me
+    users/               Admin user management (list/get/update/delete)
+    audit/               Admin audit log listing + recordAuditLog()
   db/                   Prisma client singleton
 prisma/
   schema.prisma          Data model
@@ -72,8 +84,8 @@ tests/                   Vitest + supertest integration tests
 
 ## Status
 
-Actively under development. See commit history for progress; new modules (RBAC, user
-management, audit logging, and more) are being added incrementally.
+Actively under development. See commit history for progress; new modules are being added
+incrementally per the roadmap below.
 
 ## Roadmap
 
@@ -82,7 +94,7 @@ A rough 14-day build plan. Each day adds a self-contained module with its own te
 | Day | Focus                                                                     |
 | --- | -------------------------------------------------------------------------- |
 | 1   | ✅ Project scaffold, config/logger, Express app, Prisma + User model, auth (register/login/refresh/me), integration tests, CI |
-| 2   | 🚧 RBAC middleware, admin user management (list/get/update/delete), audit logging, auth rate limiting |
+| 2   | ✅ RBAC middleware, admin user management (list/get/update/delete), audit logging, auth rate limiting |
 | 3   | Teams/organizations — multi-tenancy model, membership, invites |
 | 4   | Fine-grained permissions — resource-scoped permission checks beyond role |
 | 5   | API keys — service-to-service auth, issuance/rotation/revocation |
