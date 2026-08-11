@@ -2,6 +2,7 @@ import cors from 'cors';
 import express, { type Express } from 'express';
 import helmet from 'helmet';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
+import { authRateLimiter } from './middleware/rateLimit.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { auditRouter } from './modules/audit/audit.routes.js';
 import { authRouter } from './modules/auth/auth.routes.js';
@@ -18,6 +19,7 @@ export function createApp(): Express {
   app.use(requestLogger);
 
   app.use(healthRouter);
+  app.use('/auth', authRateLimiter);
   app.use(authRouter);
   app.use(auditRouter);
   app.use(userRouter);
