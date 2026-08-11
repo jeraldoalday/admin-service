@@ -38,10 +38,7 @@ export async function listUsers(query: ListUsersQuery): Promise<PaginatedResult<
     ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
     ...(query.search
       ? {
-          OR: [
-            { email: { contains: query.search } },
-            { displayName: { contains: query.search } },
-          ],
+          OR: [{ email: { contains: query.search } }, { displayName: { contains: query.search } }],
         }
       : {}),
   };
