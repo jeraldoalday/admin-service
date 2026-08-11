@@ -6,7 +6,7 @@ import { get, list, remove, update } from './user.controller.js';
 
 export const userRouter = Router();
 
-userRouter.use(requireAuth, requireRole('ADMIN'));
+userRouter.use('/users', requireAuth, requireRole('ADMIN'));
 
 userRouter.get('/users', asyncHandler(list));
 userRouter.get('/users/:id', asyncHandler(get));
