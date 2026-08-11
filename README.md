@@ -74,3 +74,26 @@ tests/                   Vitest + supertest integration tests
 
 Actively under development. See commit history for progress; new modules (RBAC, user
 management, audit logging, and more) are being added incrementally.
+
+## Roadmap
+
+A rough 14-day build plan. Each day adds a self-contained module with its own tests.
+
+| Day | Focus                                                                     |
+| --- | -------------------------------------------------------------------------- |
+| 1   | ✅ Project scaffold, config/logger, Express app, Prisma + User model, auth (register/login/refresh/me), integration tests, CI |
+| 2   | 🚧 RBAC middleware, admin user management (list/get/update/delete), audit logging, auth rate limiting |
+| 3   | Teams/organizations — multi-tenancy model, membership, invites |
+| 4   | Fine-grained permissions — resource-scoped permission checks beyond role |
+| 5   | API keys — service-to-service auth, issuance/rotation/revocation |
+| 6   | Notifications — email templates, dev/mock transport, user preferences |
+| 7   | File uploads — storage abstraction, avatar/attachment endpoints |
+| 8   | Background jobs — queue, scheduled cleanup and maintenance tasks |
+| 9   | Advanced search & filtering — query DSL, sorting, saved filters |
+| 10  | Outbound webhooks — subscriptions, signed delivery, retries |
+| 11  | Reporting APIs — aggregated stats/dashboards for admins |
+| 12  | Observability — metrics endpoint, request tracing, audit log export |
+| 13  | Hardening — security review pass, dependency audit, load testing |
+| 14  | Polish & release — OpenAPI spec, versioning, deployment docs, v1.0 |
+
+Status markers (✅ done, 🚧 in progress) are updated as work lands.
