@@ -1,3 +1,4 @@
+import type { TeamMembership } from '../generated/prisma/client.js';
 import type { UserRole } from '../generated/prisma/enums.js';
 
 declare global {
@@ -7,6 +8,7 @@ declare global {
         id: string;
         role: UserRole;
       };
+      teamMembership?: TeamMembership;
     }
   }
 }
