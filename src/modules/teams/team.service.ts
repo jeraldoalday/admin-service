@@ -218,9 +218,12 @@ export async function removeMember(teamId: string, targetUserId: string): Promis
     throw new BadRequestError('A team must have at least one owner');
   }
 
-  await prisma.teamMembership.delete({
-    where: { teamId_userId: { teamId, userId: targetUserId } },
-  });
+  // Also clear any permission grants so a later re-invite starts from a clean slate
+  // instead of silently restoring the access this member had before they left.
+  await prisma.$transaction([
+    prisma.teamPermissionGrant.deleteMany({ where: { teamId, userId: targetUserId } }),
+    prisma.teamMembership.delete({ where: { teamId_userId: { teamId, userId: targetUserId } } }),
+  ]);
 }
 
 export async function leaveTeam(teamId: string, userId: string): Promise<void> {
@@ -237,7 +240,10 @@ export async function leaveTeam(teamId: string, userId: string): Promise<void> {
     );
   }
 
-  await prisma.teamMembership.delete({ where: { teamId_userId: { teamId, userId } } });
+  await prisma.$transaction([
+    prisma.teamPermissionGrant.deleteMany({ where: { teamId, userId } }),
+    prisma.teamMembership.delete({ where: { teamId_userId: { teamId, userId } } }),
+  ]);
 }
 
 export async function createInvite(
