@@ -65,6 +65,8 @@ npm run dev             # starts the server with hot reload on :3000
 | GET    | `/teams/:teamId/invites`           | owner/admin | List invites (filter by status)                                 |
 | DELETE | `/teams/:teamId/invites/:inviteId` | owner/admin | Revoke a pending invite                                         |
 | POST   | `/invites/:token/accept`           | bearer      | Accept an invite (email must match invite)                      |
+| GET    | `/teams/:teamId/members/:userId/permissions` | permission | View a member's role-default, granted, and effective permissions |
+| PUT    | `/teams/:teamId/members/:userId/permissions` | permission | Replace a member's granted permission overrides                  |
 
 Errors are returned as `{ "error": { "code": string, "message": string, "details"?: unknown } }`
 with an appropriate HTTP status code.
@@ -82,6 +84,15 @@ single-use tokens tied to an email address and expire after 7 days; accepting on
 being signed in as a user whose account email matches the invite. All team/membership/invite
 mutations write an entry to `/audit-logs`.
 
+Fine-grained permissions add resource-scoped access within a team, independent of the coarse
+`TeamRole`. There are four permissions: `MANAGE_TEAM`, `MANAGE_MEMBERS`, `MANAGE_INVITES`, and
+`MANAGE_PERMISSIONS`. `OWNER` and `ADMIN` hold all of them by default; `MEMBER` holds none. An
+`OWNER`/`ADMIN` (or anyone else holding `MANAGE_PERMISSIONS`) can grant a specific permission to
+a plain member without promoting their team role — e.g. letting one member manage invites while
+everyone else stays a `MEMBER`. Grants are additive only: they can extend a member's access but
+never revoke below their role's defaults, and team deletion stays a hardcoded `OWNER`-only action
+outside this system. All permission mutations write an entry to `/audit-logs`.
+
 ## Project layout
 
 ```
@@ -97,6 +108,7 @@ src/
     users/               Admin user management (list/get/update/delete)
     audit/               Admin audit log listing + recordAuditLog()
     teams/               Teams (multi-tenancy), membership, and invites
+    permissions/         Fine-grained, resource-scoped permission grants for teams
   db/                   Prisma client singleton
 prisma/
   schema.prisma          Data model
@@ -118,7 +130,7 @@ A rough 14-day build plan. Each day adds a self-contained module with its own te
 | 1   | ✅ Project scaffold, config/logger, Express app, Prisma + User model, auth (register/login/refresh/me), integration tests, CI |
 | 2   | ✅ RBAC middleware, admin user management (list/get/update/delete), audit logging, auth rate limiting                         |
 | 3   | ✅ Teams/organizations — multi-tenancy model, membership, invites                                                             |
-| 4   | Fine-grained permissions — resource-scoped permission checks beyond role                                                      |
+| 4   | ✅ Fine-grained permissions — resource-scoped permission checks beyond role                                                    |
 | 5   | API keys — service-to-service auth, issuance/rotation/revocation                                                              |
 | 6   | Notifications — email templates, dev/mock transport, user preferences                                                         |
 | 7   | File uploads — storage abstraction, avatar/attachment endpoints                                                               |
