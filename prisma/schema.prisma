@@ -25,7 +25,8 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  teamMemberships TeamMembership[]
+  teamMemberships  TeamMembership[]
+  permissionGrants TeamPermissionGrant[]
 
   @@map("users")
 }
@@ -43,6 +44,13 @@ enum InviteStatus {
   EXPIRED
 }
 
+enum TeamPermission {
+  MANAGE_TEAM
+  MANAGE_MEMBERS
+  MANAGE_INVITES
+  MANAGE_PERMISSIONS
+}
+
 model Team {
   id        String   @id @default(cuid())
   name      String
@@ -50,8 +58,9 @@ model Team {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  memberships TeamMembership[]
-  invites     TeamInvite[]
+  memberships     TeamMembership[]
+  invites         TeamInvite[]
+  permissionGrants TeamPermissionGrant[]
 
   @@map("teams")
 }
@@ -87,6 +96,21 @@ model TeamInvite {
   @@index([teamId])
   @@index([email])
   @@map("team_invites")
+}
+
+model TeamPermissionGrant {
+  id         String         @id @default(cuid())
+  teamId     String
+  userId     String
+  permission TeamPermission
+  createdAt  DateTime       @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId, permission])
+  @@index([teamId, userId])
+  @@map("team_permission_grants")
 }
 
 model AuditLog {
