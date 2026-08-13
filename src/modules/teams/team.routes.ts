@@ -16,6 +16,7 @@ import {
   remove,
   update,
 } from './team.controller.js';
+import { requirePermission } from '../permissions/permission.middleware.js';
 import { requireTeamMembership } from './team.middleware.js';
 
 export const teamRouter = Router();
@@ -27,7 +28,7 @@ teamRouter.get('/teams', asyncHandler(list));
 teamRouter.get('/teams/:teamId', asyncHandler(requireTeamMembership()), asyncHandler(get));
 teamRouter.patch(
   '/teams/:teamId',
-  asyncHandler(requireTeamMembership('OWNER', 'ADMIN')),
+  asyncHandler(requirePermission('MANAGE_TEAM')),
   asyncHandler(update),
 );
 teamRouter.delete(
@@ -43,29 +44,29 @@ teamRouter.get(
 );
 teamRouter.patch(
   '/teams/:teamId/members/:userId',
-  asyncHandler(requireTeamMembership('OWNER', 'ADMIN')),
+  asyncHandler(requirePermission('MANAGE_MEMBERS')),
   asyncHandler(changeMemberRole),
 );
 teamRouter.delete(
   '/teams/:teamId/members/:userId',
-  asyncHandler(requireTeamMembership('OWNER', 'ADMIN')),
+  asyncHandler(requirePermission('MANAGE_MEMBERS')),
   asyncHandler(deleteMember),
 );
 teamRouter.post('/teams/:teamId/leave', asyncHandler(requireTeamMembership()), asyncHandler(leave));
 
 teamRouter.post(
   '/teams/:teamId/invites',
-  asyncHandler(requireTeamMembership('OWNER', 'ADMIN')),
+  asyncHandler(requirePermission('MANAGE_INVITES')),
   asyncHandler(createTeamInvite),
 );
 teamRouter.get(
   '/teams/:teamId/invites',
-  asyncHandler(requireTeamMembership('OWNER', 'ADMIN')),
+  asyncHandler(requirePermission('MANAGE_INVITES')),
   asyncHandler(listTeamInvites),
 );
 teamRouter.delete(
   '/teams/:teamId/invites/:inviteId',
-  asyncHandler(requireTeamMembership('OWNER', 'ADMIN')),
+  asyncHandler(requirePermission('MANAGE_INVITES')),
   asyncHandler(deleteInvite),
 );
 

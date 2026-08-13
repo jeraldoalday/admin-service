@@ -7,6 +7,7 @@ import { requestLogger } from './middleware/requestLogger.js';
 import { auditRouter } from './modules/audit/audit.routes.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { healthRouter } from './modules/health/health.routes.js';
+import { permissionRouter } from './modules/permissions/permission.routes.js';
 import { inviteRouter, teamRouter } from './modules/teams/team.routes.js';
 import { userRouter } from './modules/users/user.routes.js';
 
@@ -26,6 +27,7 @@ export function createApp(): Express {
   app.use(userRouter);
   app.use(teamRouter);
   app.use(inviteRouter);
+  app.use(permissionRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
