@@ -49,6 +49,12 @@ enum TeamPermission {
   MANAGE_MEMBERS
   MANAGE_INVITES
   MANAGE_PERMISSIONS
+  MANAGE_API_KEYS
+}
+
+enum ApiKeyStatus {
+  ACTIVE
+  REVOKED
 }
 
 model Team {
@@ -61,6 +67,7 @@ model Team {
   memberships     TeamMembership[]
   invites         TeamInvite[]
   permissionGrants TeamPermissionGrant[]
+  apiKeys         ApiKey[]
 
   @@map("teams")
 }
@@ -111,6 +118,27 @@ model TeamPermissionGrant {
   @@unique([teamId, userId, permission])
   @@index([teamId, userId])
   @@map("team_permission_grants")
+}
+
+model ApiKey {
+  id          String       @id @default(cuid())
+  teamId      String
+  name        String
+  keyPrefix   String
+  keyHash     String       @unique
+  permissions String
+  status      ApiKeyStatus @default(ACTIVE)
+  createdById String
+  expiresAt   DateTime?
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+  @@map("api_keys")
 }
 
 model AuditLog {
