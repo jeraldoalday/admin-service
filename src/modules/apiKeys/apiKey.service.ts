@@ -42,8 +42,18 @@ interface ApiKeyRecord {
 }
 
 function toApiKeyView(key: ApiKeyRecord): ApiKeyView {
-  const { id, teamId, name, keyPrefix, status, expiresAt, lastUsedAt, revokedAt, createdAt, updatedAt } =
-    key;
+  const {
+    id,
+    teamId,
+    name,
+    keyPrefix,
+    status,
+    expiresAt,
+    lastUsedAt,
+    revokedAt,
+    createdAt,
+    updatedAt,
+  } = key;
   return {
     id,
     teamId,

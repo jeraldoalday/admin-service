@@ -9,7 +9,11 @@ import {
   revokeApiKey,
   rotateApiKey,
 } from './apiKey.service.js';
-import { apiKeyIdParamsSchema, createApiKeySchema, listApiKeysQuerySchema } from './apiKey.validation.js';
+import {
+  apiKeyIdParamsSchema,
+  createApiKeySchema,
+  listApiKeysQuerySchema,
+} from './apiKey.validation.js';
 
 function requireUser(req: Request): { id: string } {
   if (!req.user) {
