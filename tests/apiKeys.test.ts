@@ -298,3 +298,202 @@ describe('invite conflict check ignores expired pending invites (regression)', (
     expect(secondInvite.status).toBe(201);
   });
 });
+
+describe('GET /teams/:teamId/api-keys/:keyId', () => {
+  it('returns a single key', async () => {
+    const owner = await registerUser(app);
+    const team = await createTeam(owner.accessToken);
+    const createRes = await request(app)
+      .post(`/teams/${team.id}/api-keys`)
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .send({ name: 'Solo lookup' });
+
+    const res = await request(app)
+      .get(`/teams/${team.id}/api-keys/${createRes.body.apiKey.id}`)
+      .set('Authorization', `Bearer ${owner.accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.apiKey.name).toBe('Solo lookup');
+  });
+
+  it('returns 404 for a key that belongs to a different team', async () => {
+    const owner = await registerUser(app);
+    const teamA = await createTeam(owner.accessToken, 'Team A');
+    const teamB = await createTeam(owner.accessToken, 'Team B');
+    const createRes = await request(app)
+      .post(`/teams/${teamA.id}/api-keys`)
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .send({ name: 'Team A only' });
+
+    const res = await request(app)
+      .get(`/teams/${teamB.id}/api-keys/${createRes.body.apiKey.id}`)
+      .set('Authorization', `Bearer ${owner.accessToken}`);
+
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 404 for an unknown key id', async () => {
+    const owner = await registerUser(app);
+    const team = await createTeam(owner.accessToken);
+
+    const res = await request(app)
+      .get(`/teams/${team.id}/api-keys/not-a-real-id`)
+      .set('Authorization', `Bearer ${owner.accessToken}`);
+
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('API key management authorization', () => {
+  it('rejects unauthenticated requests with 401', async () => {
+    const owner = await registerUser(app);
+    const team = await createTeam(owner.accessToken);
+
+    const res = await request(app).post(`/teams/${team.id}/api-keys`).send({ name: 'Nope' });
+    expect(res.status).toBe(401);
+  });
+
+  it('rejects a plain member from listing keys with 403', async () => {
+    const owner = await registerUser(app);
+    const member = await registerUser(app, { email: 'no-access@example.com' });
+    const team = await createTeam(owner.accessToken);
+    await addMember(team.id, owner.accessToken, member);
+
+    const res = await request(app)
+      .get(`/teams/${team.id}/api-keys`)
+      .set('Authorization', `Bearer ${member.accessToken}`);
+
+    expect(res.status).toBe(403);
+  });
+
+  it('rejects a plain member from rotating a key with 403', async () => {
+    const owner = await registerUser(app);
+    const member = await registerUser(app, { email: 'no-rotate@example.com' });
+    const team = await createTeam(owner.accessToken);
+    await addMember(team.id, owner.accessToken, member);
+
+    const createRes = await request(app)
+      .post(`/teams/${team.id}/api-keys`)
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .send({ name: 'Owner only' });
+
+    const res = await request(app)
+      .post(`/teams/${team.id}/api-keys/${createRes.body.apiKey.id}/rotate`)
+      .set('Authorization', `Bearer ${member.accessToken}`);
+
+    expect(res.status).toBe(403);
+  });
+
+  it('a member granted MANAGE_API_KEYS can create a key without being promoted', async () => {
+    const owner = await registerUser(app);
+    const member = await registerUser(app, { email: 'granted-keys@example.com' });
+    const team = await createTeam(owner.accessToken);
+    await addMember(team.id, owner.accessToken, member);
+
+    await request(app)
+      .put(`/teams/${team.id}/members/${member.id}/permissions`)
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .send({ permissions: ['MANAGE_API_KEYS'] });
+
+    const res = await request(app)
+      .post(`/teams/${team.id}/api-keys`)
+      .set('Authorization', `Bearer ${member.accessToken}`)
+      .send({ name: 'Granted access' });
+
+    expect(res.status).toBe(201);
+  });
+});
+
+describe('POST /teams/:teamId/api-keys/:keyId/rotate edge cases', () => {
+  it('rejects rotating an already-revoked key with 400', async () => {
+    const owner = await registerUser(app);
+    const team = await createTeam(owner.accessToken);
+    const createRes = await request(app)
+      .post(`/teams/${team.id}/api-keys`)
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .send({ name: 'Revoke then rotate' });
+
+    await request(app)
+      .post(`/teams/${team.id}/api-keys/${createRes.body.apiKey.id}/revoke`)
+      .set('Authorization', `Bearer ${owner.accessToken}`);
+
+    const res = await request(app)
+      .post(`/teams/${team.id}/api-keys/${createRes.body.apiKey.id}/rotate`)
+      .set('Authorization', `Bearer ${owner.accessToken}`);
+
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 404 when rotating a key that does not exist', async () => {
+    const owner = await registerUser(app);
+    const team = await createTeam(owner.accessToken);
+
+    const res = await request(app)
+      .post(`/teams/${team.id}/api-keys/not-a-real-id/rotate`)
+      .set('Authorization', `Bearer ${owner.accessToken}`);
+
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('GET /teams/:teamId/api-keys status filtering', () => {
+  it('filters by status', async () => {
+    const owner = await registerUser(app);
+    const team = await createTeam(owner.accessToken);
+
+    const active = await request(app)
+      .post(`/teams/${team.id}/api-keys`)
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .send({ name: 'Stays active' });
+    const revoked = await request(app)
+      .post(`/teams/${team.id}/api-keys`)
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .send({ name: 'Gets revoked' });
+    await request(app)
+      .post(`/teams/${team.id}/api-keys/${revoked.body.apiKey.id}/revoke`)
+      .set('Authorization', `Bearer ${owner.accessToken}`);
+
+    const activeRes = await request(app)
+      .get(`/teams/${team.id}/api-keys?status=ACTIVE`)
+      .set('Authorization', `Bearer ${owner.accessToken}`);
+    expect(activeRes.body.items).toHaveLength(1);
+    expect(activeRes.body.items[0].id).toBe(active.body.apiKey.id);
+
+    const revokedRes = await request(app)
+      .get(`/teams/${team.id}/api-keys?status=REVOKED`)
+      .set('Authorization', `Bearer ${owner.accessToken}`);
+    expect(revokedRes.body.items).toHaveLength(1);
+    expect(revokedRes.body.items[0].id).toBe(revoked.body.apiKey.id);
+  });
+});
+
+describe('POST /teams/:teamId/api-keys permission validation', () => {
+  it('rejects an unknown permission value with 400', async () => {
+    const owner = await registerUser(app);
+    const team = await createTeam(owner.accessToken);
+
+    const res = await request(app)
+      .post(`/teams/${team.id}/api-keys`)
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .send({ name: 'Bad scope', permissions: ['NOT_A_REAL_PERMISSION'] });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('defaults to no permissions, which the service guard then rejects with 403', async () => {
+    const owner = await registerUser(app);
+    const team = await createTeam(owner.accessToken);
+
+    const createRes = await request(app)
+      .post(`/teams/${team.id}/api-keys`)
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .send({ name: 'No scopes' });
+
+    expect(createRes.body.apiKey.permissions).toEqual([]);
+
+    const res = await request(app)
+      .get(`/service/teams/${team.id}/members`)
+      .set('X-API-Key', createRes.body.secret);
+    expect(res.status).toBe(403);
+  });
+});
