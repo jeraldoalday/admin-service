@@ -259,7 +259,7 @@ export async function createInvite(
   }
 
   const existingInvite = await prisma.teamInvite.findFirst({
-    where: { teamId, email: input.email, status: 'PENDING' },
+    where: { teamId, email: input.email, status: 'PENDING', expiresAt: { gt: new Date() } },
   });
   if (existingInvite) {
     throw new ConflictError('There is already a pending invite for this email');
