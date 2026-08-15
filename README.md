@@ -39,34 +39,40 @@ npm run dev             # starts the server with hot reload on :3000
 
 ## API
 
-| Method | Route                              | Auth        | Description                                                     |
-| ------ | ---------------------------------- | ----------- | --------------------------------------------------------------- |
-| GET    | `/health`                          | none        | Liveness check                                                  |
-| GET    | `/health/ready`                    | none        | Readiness check (verifies DB connection)                        |
-| POST   | `/auth/register`                   | none        | Create an account, returns tokens                               |
-| POST   | `/auth/login`                      | none        | Authenticate, returns tokens                                    |
-| POST   | `/auth/refresh`                    | none        | Exchange a refresh token for a new pair                         |
-| GET    | `/auth/me`                         | bearer      | Returns the authenticated user                                  |
-| GET    | `/users`                           | admin       | List users (paginated; filter by role/isActive/search)          |
-| GET    | `/users/:id`                       | admin       | Get a single user                                               |
-| PATCH  | `/users/:id`                       | admin       | Update displayName/role/isActive                                |
-| DELETE | `/users/:id`                       | admin       | Delete a user                                                   |
-| GET    | `/audit-logs`                      | admin       | List audit log entries (paginated; filter by action/targetType) |
-| POST   | `/teams`                           | bearer      | Create a team; the creator becomes its `OWNER`                  |
-| GET    | `/teams`                           | bearer      | List teams the caller is a member of                            |
-| GET    | `/teams/:teamId`                   | member      | Get a single team                                               |
-| PATCH  | `/teams/:teamId`                   | owner/admin | Rename a team                                                   |
-| DELETE | `/teams/:teamId`                   | owner       | Delete a team                                                   |
-| GET    | `/teams/:teamId/members`           | member      | List team members                                               |
-| PATCH  | `/teams/:teamId/members/:userId`   | owner/admin | Change a member's team role                                     |
-| DELETE | `/teams/:teamId/members/:userId`   | owner/admin | Remove a member from the team                                   |
-| POST   | `/teams/:teamId/leave`             | member      | Leave a team                                                    |
-| POST   | `/teams/:teamId/invites`           | owner/admin | Invite someone to the team by email                             |
-| GET    | `/teams/:teamId/invites`           | owner/admin | List invites (filter by status)                                 |
-| DELETE | `/teams/:teamId/invites/:inviteId` | owner/admin | Revoke a pending invite                                         |
-| POST   | `/invites/:token/accept`           | bearer      | Accept an invite (email must match invite)                      |
-| GET    | `/teams/:teamId/members/:userId/permissions` | permission | View a member's role-default, granted, and effective permissions |
-| PUT    | `/teams/:teamId/members/:userId/permissions` | permission | Replace a member's granted permission overrides                  |
+| Method | Route                                        | Auth        | Description                                                           |
+| ------ | -------------------------------------------- | ----------- | --------------------------------------------------------------------- |
+| GET    | `/health`                                    | none        | Liveness check                                                        |
+| GET    | `/health/ready`                              | none        | Readiness check (verifies DB connection)                              |
+| POST   | `/auth/register`                             | none        | Create an account, returns tokens                                     |
+| POST   | `/auth/login`                                | none        | Authenticate, returns tokens                                          |
+| POST   | `/auth/refresh`                              | none        | Exchange a refresh token for a new pair                               |
+| GET    | `/auth/me`                                   | bearer      | Returns the authenticated user                                        |
+| GET    | `/users`                                     | admin       | List users (paginated; filter by role/isActive/search)                |
+| GET    | `/users/:id`                                 | admin       | Get a single user                                                     |
+| PATCH  | `/users/:id`                                 | admin       | Update displayName/role/isActive                                      |
+| DELETE | `/users/:id`                                 | admin       | Delete a user                                                         |
+| GET    | `/audit-logs`                                | admin       | List audit log entries (paginated; filter by action/targetType)       |
+| POST   | `/teams`                                     | bearer      | Create a team; the creator becomes its `OWNER`                        |
+| GET    | `/teams`                                     | bearer      | List teams the caller is a member of                                  |
+| GET    | `/teams/:teamId`                             | member      | Get a single team                                                     |
+| PATCH  | `/teams/:teamId`                             | owner/admin | Rename a team                                                         |
+| DELETE | `/teams/:teamId`                             | owner       | Delete a team                                                         |
+| GET    | `/teams/:teamId/members`                     | member      | List team members                                                     |
+| PATCH  | `/teams/:teamId/members/:userId`             | owner/admin | Change a member's team role                                           |
+| DELETE | `/teams/:teamId/members/:userId`             | owner/admin | Remove a member from the team                                         |
+| POST   | `/teams/:teamId/leave`                       | member      | Leave a team                                                          |
+| POST   | `/teams/:teamId/invites`                     | owner/admin | Invite someone to the team by email                                   |
+| GET    | `/teams/:teamId/invites`                     | owner/admin | List invites (filter by status)                                       |
+| DELETE | `/teams/:teamId/invites/:inviteId`           | owner/admin | Revoke a pending invite                                               |
+| POST   | `/invites/:token/accept`                     | bearer      | Accept an invite (email must match invite)                            |
+| GET    | `/teams/:teamId/members/:userId/permissions` | permission  | View a member's role-default, granted, and effective permissions      |
+| PUT    | `/teams/:teamId/members/:userId/permissions` | permission  | Replace a member's granted permission overrides                       |
+| POST   | `/teams/:teamId/api-keys`                    | permission  | Create an API key; the plaintext secret is returned only here         |
+| GET    | `/teams/:teamId/api-keys`                    | permission  | List API keys (filter by status); never returns the secret            |
+| GET    | `/teams/:teamId/api-keys/:keyId`             | permission  | Get a single API key                                                  |
+| POST   | `/teams/:teamId/api-keys/:keyId/revoke`      | permission  | Revoke an API key                                                     |
+| POST   | `/teams/:teamId/api-keys/:keyId/rotate`      | permission  | Revoke and replace an API key; returns the new secret                 |
+| GET    | `/service/teams/:teamId/members`             | API key     | List team members using an `X-API-Key` header instead of a user token |
 
 Errors are returned as `{ "error": { "code": string, "message": string, "details"?: unknown } }`
 with an appropriate HTTP status code.
@@ -85,13 +91,22 @@ being signed in as a user whose account email matches the invite. All team/membe
 mutations write an entry to `/audit-logs`.
 
 Fine-grained permissions add resource-scoped access within a team, independent of the coarse
-`TeamRole`. There are four permissions: `MANAGE_TEAM`, `MANAGE_MEMBERS`, `MANAGE_INVITES`, and
-`MANAGE_PERMISSIONS`. `OWNER` and `ADMIN` hold all of them by default; `MEMBER` holds none. An
-`OWNER`/`ADMIN` (or anyone else holding `MANAGE_PERMISSIONS`) can grant a specific permission to
-a plain member without promoting their team role — e.g. letting one member manage invites while
-everyone else stays a `MEMBER`. Grants are additive only: they can extend a member's access but
-never revoke below their role's defaults, and team deletion stays a hardcoded `OWNER`-only action
-outside this system. All permission mutations write an entry to `/audit-logs`.
+`TeamRole`. There are five permissions: `MANAGE_TEAM`, `MANAGE_MEMBERS`, `MANAGE_INVITES`,
+`MANAGE_PERMISSIONS`, and `MANAGE_API_KEYS`. `OWNER` and `ADMIN` hold all of them by default;
+`MEMBER` holds none. An `OWNER`/`ADMIN` (or anyone else holding `MANAGE_PERMISSIONS`) can grant a
+specific permission to a plain member without promoting their team role — e.g. letting one member
+manage invites while everyone else stays a `MEMBER`. Grants are additive only: they can extend a
+member's access but never revoke below their role's defaults, and team deletion stays a hardcoded
+`OWNER`-only action outside this system. All permission mutations write an entry to `/audit-logs`.
+
+API keys let another service authenticate as a team without a human user or session. Only someone
+holding `MANAGE_API_KEYS` on the team can create, list, revoke, or rotate a key; the plaintext
+secret (`sk_...`) is only ever returned once, from the create and rotate responses — only its
+SHA-256 hash and a short display-safe prefix are persisted. Each key carries its own subset of the
+five team permissions above, independent of any user's role, and machine clients present it via
+an `X-API-Key` header (instead of a bearer token) on routes under `/service/*`. A key scoped to
+one team is rejected on another team's routes, and revoking or rotating a key invalidates its old
+secret immediately. Every create/revoke/rotate writes an entry to `/audit-logs`.
 
 ## Project layout
 
@@ -109,6 +124,7 @@ src/
     audit/               Admin audit log listing + recordAuditLog()
     teams/               Teams (multi-tenancy), membership, and invites
     permissions/         Fine-grained, resource-scoped permission grants for teams
+    apiKeys/              API keys for service-to-service auth (issuance/rotation/revocation)
   db/                   Prisma client singleton
 prisma/
   schema.prisma          Data model
@@ -130,8 +146,8 @@ A rough 14-day build plan. Each day adds a self-contained module with its own te
 | 1   | ✅ Project scaffold, config/logger, Express app, Prisma + User model, auth (register/login/refresh/me), integration tests, CI |
 | 2   | ✅ RBAC middleware, admin user management (list/get/update/delete), audit logging, auth rate limiting                         |
 | 3   | ✅ Teams/organizations — multi-tenancy model, membership, invites                                                             |
-| 4   | ✅ Fine-grained permissions — resource-scoped permission checks beyond role                                                    |
-| 5   | API keys — service-to-service auth, issuance/rotation/revocation                                                              |
+| 4   | ✅ Fine-grained permissions — resource-scoped permission checks beyond role                                                   |
+| 5   | ✅ API keys — service-to-service auth, issuance/rotation/revocation                                                           |
 | 6   | Notifications — email templates, dev/mock transport, user preferences                                                         |
 | 7   | File uploads — storage abstraction, avatar/attachment endpoints                                                               |
 | 8   | Background jobs — queue, scheduled cleanup and maintenance tasks                                                              |
