@@ -5,6 +5,7 @@ export const TEAM_PERMISSIONS: TeamPermission[] = [
   'MANAGE_MEMBERS',
   'MANAGE_INVITES',
   'MANAGE_PERMISSIONS',
+  'MANAGE_API_KEYS',
 ];
 
 // Permissions every member of a role has by default, independent of any grants.
