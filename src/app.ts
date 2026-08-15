@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { authRateLimiter } from './middleware/rateLimit.js';
 import { requestLogger } from './middleware/requestLogger.js';
+import { apiKeyRouter, serviceRouter } from './modules/apiKeys/apiKey.routes.js';
 import { auditRouter } from './modules/audit/audit.routes.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { healthRouter } from './modules/health/health.routes.js';
@@ -28,6 +29,8 @@ export function createApp(): Express {
   app.use(teamRouter);
   app.use(inviteRouter);
   app.use(permissionRouter);
+  app.use(apiKeyRouter);
+  app.use(serviceRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
