@@ -1,161 +1,148 @@
 # admin-service
 
-Internal admin/backoffice API service. TypeScript, Express, Prisma.
+Internal admin/backoffice console. React, TypeScript, Vite.
+
+Users, teams, invites, fine-grained permissions, API keys, and an audit trail — as a single
+React application with no backend to stand up. The domain rules run in the browser against an
+in-memory store that mirrors itself into `localStorage`, so the whole console is explorable
+from `npm run dev` and the whole test suite runs from `npm test`.
 
 ## Stack
 
 - **Runtime**: Node.js 20+, TypeScript (strict mode)
-- **HTTP**: Express 5
-- **Database**: SQLite via Prisma ORM (better-sqlite3 driver adapter) for local dev; the
-  datasource is a plain Prisma schema, so swapping to Postgres/MySQL later is a config
-  change, not a rewrite.
-- **Auth**: JWT access + refresh tokens, bcrypt-hashed passwords
-- **Validation**: zod
-- **Logging**: pino (pretty-printed in dev)
-- **Tests**: Vitest + supertest, run against a real (migrated, isolated) SQLite database
+- **UI**: React 19 + React Router 7, built with Vite 7
+- **Domain**: plain TypeScript modules, framework-free and independently testable
+- **Storage**: in-memory tables persisted to `localStorage`; no database, no server
+- **Validation**: zod — the same schemas back the forms and the domain functions
+- **Passwords**: bcryptjs hashes; API key secrets are stored as SHA-256 digests
+- **Tests**: Vitest + Testing Library (jsdom), no credentials or external services required
 
 ## Getting started
 
 ```bash
 npm install
-cp .env.example .env   # edit secrets if needed
-npm run prisma:migrate # applies migrations to the local dev database
-npm run dev             # starts the server with hot reload on :3000
+npm run dev     # http://localhost:5173
 ```
+
+Demo data is seeded on first run. Sign in as `admin@example.com` — every seeded account
+shares the password `password123`. Clearing site data resets the console to that seed.
 
 ## Scripts
 
-| Script                            | Description                                                 |
-| --------------------------------- | ----------------------------------------------------------- |
-| `npm run dev`                     | Run the server with hot reload (tsx watch)                  |
-| `npm run build`                   | Compile TypeScript to `dist/`                               |
-| `npm start`                       | Run the compiled server (`dist/server.js`)                  |
-| `npm run lint` / `lint:fix`       | ESLint                                                      |
-| `npm run format` / `format:check` | Prettier                                                    |
-| `npm run typecheck`               | `tsc --noEmit`                                              |
-| `npm test`                        | Run the test suite (Vitest, migrates a fresh test DB first) |
-| `npm run prisma:migrate`          | Create/apply a dev migration                                |
-| `npm run prisma:generate`         | Regenerate the Prisma client                                |
+| Script                            | Description                                 |
+| --------------------------------- | ------------------------------------------- |
+| `npm run dev`                     | Vite dev server with hot module replacement |
+| `npm run build`                   | Typecheck and build to `dist/`              |
+| `npm run preview`                 | Serve the production build locally          |
+| `npm run lint` / `lint:fix`       | ESLint (including the React Hooks rules)    |
+| `npm run format` / `format:check` | Prettier                                    |
+| `npm run typecheck`               | `tsc` with no emit                          |
+| `npm test`                        | Run the test suite once                     |
+| `npm run test:watch`              | Run the test suite in watch mode            |
+| `npm run test:coverage`           | Run the suite with a coverage report        |
 
-## API
+## Screens
 
-| Method | Route                                        | Auth        | Description                                                           |
-| ------ | -------------------------------------------- | ----------- | --------------------------------------------------------------------- |
-| GET    | `/health`                                    | none        | Liveness check                                                        |
-| GET    | `/health/ready`                              | none        | Readiness check (verifies DB connection)                              |
-| POST   | `/auth/register`                             | none        | Create an account, returns tokens                                     |
-| POST   | `/auth/login`                                | none        | Authenticate, returns tokens                                          |
-| POST   | `/auth/refresh`                              | none        | Exchange a refresh token for a new pair                               |
-| GET    | `/auth/me`                                   | bearer      | Returns the authenticated user                                        |
-| GET    | `/users`                                     | admin       | List users (paginated; filter by role/isActive/search)                |
-| GET    | `/users/:id`                                 | admin       | Get a single user                                                     |
-| PATCH  | `/users/:id`                                 | admin       | Update displayName/role/isActive                                      |
-| DELETE | `/users/:id`                                 | admin       | Delete a user                                                         |
-| GET    | `/audit-logs`                                | admin       | List audit log entries (paginated; filter by action/targetType)       |
-| POST   | `/teams`                                     | bearer      | Create a team; the creator becomes its `OWNER`                        |
-| GET    | `/teams`                                     | bearer      | List teams the caller is a member of                                  |
-| GET    | `/teams/:teamId`                             | member      | Get a single team                                                     |
-| PATCH  | `/teams/:teamId`                             | owner/admin | Rename a team                                                         |
-| DELETE | `/teams/:teamId`                             | owner       | Delete a team                                                         |
-| GET    | `/teams/:teamId/members`                     | member      | List team members                                                     |
-| PATCH  | `/teams/:teamId/members/:userId`             | owner/admin | Change a member's team role                                           |
-| DELETE | `/teams/:teamId/members/:userId`             | owner/admin | Remove a member from the team                                         |
-| POST   | `/teams/:teamId/leave`                       | member      | Leave a team                                                          |
-| POST   | `/teams/:teamId/invites`                     | owner/admin | Invite someone to the team by email                                   |
-| GET    | `/teams/:teamId/invites`                     | owner/admin | List invites (filter by status)                                       |
-| DELETE | `/teams/:teamId/invites/:inviteId`           | owner/admin | Revoke a pending invite                                               |
-| POST   | `/invites/:token/accept`                     | bearer      | Accept an invite (email must match invite)                            |
-| GET    | `/teams/:teamId/members/:userId/permissions` | permission  | View a member's role-default, granted, and effective permissions      |
-| PUT    | `/teams/:teamId/members/:userId/permissions` | permission  | Replace a member's granted permission overrides                       |
-| POST   | `/teams/:teamId/api-keys`                    | permission  | Create an API key; the plaintext secret is returned only here         |
-| GET    | `/teams/:teamId/api-keys`                    | permission  | List API keys (filter by status); never returns the secret            |
-| GET    | `/teams/:teamId/api-keys/:keyId`             | permission  | Get a single API key                                                  |
-| POST   | `/teams/:teamId/api-keys/:keyId/revoke`      | permission  | Revoke an API key                                                     |
-| POST   | `/teams/:teamId/api-keys/:keyId/rotate`      | permission  | Revoke and replace an API key; returns the new secret                 |
-| GET    | `/service/teams/:teamId/members`             | API key     | List team members using an `X-API-Key` header instead of a user token |
+| Route             | Access         | What it does                                                           |
+| ----------------- | -------------- | ---------------------------------------------------------------------- |
+| `/sign-in`        | public         | Sign in or register; the first account ever created becomes an admin   |
+| `/`               | signed in      | Overview — your teams, and for admins the platform totals and activity |
+| `/teams`          | signed in      | Teams you belong to, and the form that creates one                     |
+| `/teams/:teamId`  | member         | One team: members, invites, API keys, and settings                     |
+| `/invites/:token` | signed in      | Accept an invite addressed to your account's email                     |
+| `/users`          | platform admin | Every account: search, filter, edit, delete                            |
+| `/audit-logs`     | platform admin | Append-only history of every mutation, filterable                      |
 
-Errors are returned as `{ "error": { "code": string, "message": string, "details"?: unknown } }`
-with an appropriate HTTP status code.
+Team screens only render the sections the caller's permissions cover, and the domain layer
+enforces the same rules independently — a screen you can reach still cannot perform an action
+you lack the permission for.
 
-Admin-only routes require a bearer token for a user with `role: "ADMIN"`; the auth endpoints
-under `/auth/*` are additionally rate-limited. Admins cannot change their own role/active
-status or delete their own account (avoids locking yourself out). Updates and deletes made
-through `/users` write an entry to `/audit-logs`.
+## The domain layer
 
-Teams are a separate, self-service multi-tenancy layer independent of the platform
-`role` above: any authenticated user can create a team and becomes its `OWNER`. Team roles
-(`OWNER`/`ADMIN`/`MEMBER`) only grant permissions within that team. A team always needs at
-least one `OWNER` — the last owner can't be demoted, removed, or leave. Invites are
-single-use tokens tied to an email address and expire after 7 days; accepting one requires
-being signed in as a user whose account email matches the invite. All team/membership/invite
-mutations write an entry to `/audit-logs`.
+Everything the UI is allowed to know lives under `src/domain/`, deliberately free of React so
+the rules can be tested and reasoned about on their own. Each function takes an explicit
+`Actor` — the caller on whose behalf it runs — instead of reading an ambient session, which is
+what makes a denial as easy to test as a success.
 
-Fine-grained permissions add resource-scoped access within a team, independent of the coarse
-`TeamRole`. There are five permissions: `MANAGE_TEAM`, `MANAGE_MEMBERS`, `MANAGE_INVITES`,
-`MANAGE_PERMISSIONS`, and `MANAGE_API_KEYS`. `OWNER` and `ADMIN` hold all of them by default;
-`MEMBER` holds none. An `OWNER`/`ADMIN` (or anyone else holding `MANAGE_PERMISSIONS`) can grant a
-specific permission to a plain member without promoting their team role — e.g. letting one member
-manage invites while everyone else stays a `MEMBER`. Grants are additive only: they can extend a
-member's access but never revoke below their role's defaults, and team deletion stays a hardcoded
-`OWNER`-only action outside this system. All permission mutations write an entry to `/audit-logs`.
+**Accounts.** Passwords are bcrypt-hashed. Sign-in returns the same message whether the email
+is unknown or the password is wrong, so the form cannot be used to enumerate accounts.
+Deactivated accounts cannot sign in, and an existing session pointing at one is dropped on the
+spot rather than at some later expiry. Admins cannot change their own role, deactivate
+themselves, or delete their own account.
 
-API keys let another service authenticate as a team without a human user or session. Only someone
-holding `MANAGE_API_KEYS` on the team can create, list, revoke, or rotate a key; the plaintext
-secret (`sk_...`) is only ever returned once, from the create and rotate responses — only its
-SHA-256 hash and a short display-safe prefix are persisted. Each key carries its own subset of the
-five team permissions above, independent of any user's role, and machine clients present it via
-an `X-API-Key` header (instead of a bearer token) on routes under `/service/*`. A key scoped to
-one team is rejected on another team's routes, and revoking or rotating a key invalidates its old
-secret immediately. Every create/revoke/rotate writes an entry to `/audit-logs`.
+**Teams** are a self-service multi-tenancy layer, independent of the platform `role`: any
+signed-in user can create a team and becomes its `OWNER`. Team roles (`OWNER`/`ADMIN`/`MEMBER`)
+only mean something inside that team. A team always needs at least one owner — the last one
+cannot be demoted, removed, or leave. Invites are single-use tokens tied to an email address,
+expire after seven days, and can only be accepted while signed in as the address they name.
+
+**Permissions** add resource-scoped access within a team, independent of the coarse team role.
+There are five: `MANAGE_TEAM`, `MANAGE_MEMBERS`, `MANAGE_INVITES`, `MANAGE_PERMISSIONS`, and
+`MANAGE_API_KEYS`. `OWNER` and `ADMIN` hold all of them by default, `MEMBER` holds none. Grants
+are additive: they can extend a member's access but never cut below their role's defaults — so
+one member can run invites while everyone else stays a plain member. Team deletion stays a
+hardcoded owner-only action, outside the grantable set on purpose.
+
+**API keys** let another service authenticate as a team, with no human session involved. Only
+someone holding `MANAGE_API_KEYS` can create, list, revoke, or rotate one. The plaintext secret
+(`sk_…`) is returned exactly once, from creation and rotation; only a SHA-256 digest and a
+display-safe prefix are stored. Each key carries its own subset of the five permissions, keys
+are scoped to one team and rejected against another's data, and rotation kills the old secret
+immediately. The API keys screen includes a panel that exercises a key against the
+machine-facing read, so those guarantees are visible rather than merely documented.
+
+**The audit log** is append-only, written by the domain layer rather than by the screens, which
+is what makes it a complete record instead of a sample. Every user, team, membership, invite,
+permission, and API key mutation lands in it.
+
+Failures use the same error types the rules always had — `BadRequestError`, `Unauthorized`,
+`Forbidden`, `NotFound`, `Conflict` — and screens render them in place instead of unmounting.
 
 ## Project layout
 
 ```
+index.html               Vite entry document
 src/
-  app.ts              Express app assembly (middleware, routers)
-  server.ts            Process entrypoint, graceful shutdown
-  config/              Env loading + validation (zod)
-  common/               Shared error types, async handler, logger
-  middleware/           Error handling, request logging, auth guard
-  modules/
-    health/             Liveness/readiness endpoints
-    auth/                Register/login/refresh/me
-    users/               Admin user management (list/get/update/delete)
-    audit/               Admin audit log listing + recordAuditLog()
-    teams/               Teams (multi-tenancy), membership, and invites
-    permissions/         Fine-grained, resource-scoped permission grants for teams
-    apiKeys/              API keys for service-to-service auth (issuance/rotation/revocation)
-  db/                   Prisma client singleton
-prisma/
-  schema.prisma          Data model
-  migrations/            SQL migrations
-tests/                   Vitest + supertest integration tests
+  main.tsx               Boots the store, mounts the router
+  App.tsx                Routes and the auth/admin route guards
+  styles.css             Design tokens and component styles (light + dark)
+  app/
+    boot.ts              Restore-or-seed sequence at startup
+    session.tsx          Signed-in identity, standing in for the JWT pair
+    sessionContext.ts    Session context and the useSession/useActor hooks
+    store.ts             Subscribes screens to the store's revision counter
+  components/            Layout, table, and form primitives
+  pages/                 One module per screen; team/ holds the team tabs
+  lib/format.ts          Date and permission formatting
+  domain/
+    types.ts             Entities, roles, permissions, role defaults
+    database.ts          The tables, persistence, and change notification
+    guards.ts            Actor, admin, membership, and permission checks
+    auth.ts users.ts teams.ts permissions.ts apiKeys.ts audit.ts
+    service.ts           The machine-facing, API-key-authenticated surface
+    seed.ts              Demo dataset
+    sha256.ts            Synchronous digest for API key lookup
+    validation.ts        zod schemas shared by forms and domain functions
+tests/
+  domain/                Rules, guards, persistence, and boot
+  ui/                    Whole-app tests driving the real screens
 ```
+
+## Tests
+
+```bash
+npm test
+```
+
+Every test builds the demo dataset fresh with persistence switched off, so the suite touches no
+files, no network, and no browser storage, and no test can leak state into the next. The UI
+tests mount the real application — real routes, real session provider, real domain layer — and
+drive it the way a person would; nothing is mocked. The SHA-256 implementation is checked
+against `node:crypto` directly, since API key lookup depends on the two agreeing.
 
 ## Status
 
-Actively under development. See commit history for progress; new modules are being added
-incrementally per the roadmap below.
-
-## Roadmap
-
-A rough 14-day build plan. Each day adds a self-contained module with its own tests.
-
-| Day | Focus                                                                                                                         |
-| --- | ----------------------------------------------------------------------------------------------------------------------------- |
-| 1   | ✅ Project scaffold, config/logger, Express app, Prisma + User model, auth (register/login/refresh/me), integration tests, CI |
-| 2   | ✅ RBAC middleware, admin user management (list/get/update/delete), audit logging, auth rate limiting                         |
-| 3   | ✅ Teams/organizations — multi-tenancy model, membership, invites                                                             |
-| 4   | ✅ Fine-grained permissions — resource-scoped permission checks beyond role                                                   |
-| 5   | ✅ API keys — service-to-service auth, issuance/rotation/revocation                                                           |
-| 6   | Notifications — email templates, dev/mock transport, user preferences                                                         |
-| 7   | File uploads — storage abstraction, avatar/attachment endpoints                                                               |
-| 8   | Background jobs — queue, scheduled cleanup and maintenance tasks                                                              |
-| 9   | Advanced search & filtering — query DSL, sorting, saved filters                                                               |
-| 10  | Outbound webhooks — subscriptions, signed delivery, retries                                                                   |
-| 11  | Reporting APIs — aggregated stats/dashboards for admins                                                                       |
-| 12  | Observability — metrics endpoint, request tracing, audit log export                                                           |
-| 13  | Hardening — security review pass, dependency audit, load testing                                                              |
-| 14  | Polish & release — OpenAPI spec, versioning, deployment docs, v1.0                                                            |
-
-Status markers (✅ done, 🚧 in progress) are updated as work lands.
+The service this console grew out of was an Express + Prisma API; that history is in the git
+log. The domain rules came across intact — the guards, the last-owner rules, the invite
+lifecycle, the additive permission model, the write-once API key secrets — and now run in the
+browser instead of behind HTTP.
