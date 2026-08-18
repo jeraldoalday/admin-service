@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import { teams, users } from '@/domain';
 import { adminActor, danaActor, miraActor, teamIdBySlug } from '../helpers';
@@ -59,6 +59,34 @@ describe('the audit log screen', () => {
     const table = within(screen.getByRole('table'));
     expect(table.getAllByRole('row')).toHaveLength(3);
     expect(table.getByText('{"displayName":"Dana D."}')).toBeInTheDocument();
+  });
+
+  it('exports everything the filters match, not just the visible page', async () => {
+    const admin = adminActor();
+    users.updateUser(admin, danaActor().id, { displayName: 'Dana D.' });
+
+    // jsdom implements neither object URLs nor navigation, so stand in for both and assert
+    // on the document that would have been handed to the reader.
+    const created: string[] = [];
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: (blob: Blob) => {
+        created.push(String(blob.type));
+        return 'blob:audit';
+      },
+      revokeObjectURL: () => undefined,
+    });
+    const clicks = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => undefined);
+
+    const { user } = renderApp({ route: '/audit-logs', userId: admin.id });
+    await user.selectOptions(screen.getByLabelText('Action'), 'user.updated');
+    await user.click(screen.getByRole('button', { name: 'Export CSV' }));
+
+    expect(clicks).toHaveBeenCalledOnce();
+    expect(created[0]).toContain('text/csv');
+    expect(await screen.findByRole('status')).toHaveTextContent('Exported 2 entries');
   });
 
   it('says so when a filter matches nothing', async () => {

@@ -2,8 +2,9 @@ import { useState, type ReactNode } from 'react';
 import { useLiveQuery } from '@/app/store';
 import { DataTable, Pagination } from '@/components/DataTable';
 import { PageHeader } from '@/components/Layout';
-import { Card, EmptyState, Field, Toolbar } from '@/components/ui';
+import { Card, EmptyState, Field, SuccessNotice, Toolbar } from '@/components/ui';
 import { audit } from '@/domain';
+import { toCsv, downloadTextFile } from '@/lib/csv';
 import { formatDateTime } from '@/lib/format';
 
 /** Admin-only, read-only history of every mutation the console has performed. */
@@ -11,6 +12,7 @@ export function AuditLogPage(): ReactNode {
   const [page, setPage] = useState(1);
   const [action, setAction] = useState('');
   const [targetType, setTargetType] = useState('');
+  const [exported, setExported] = useState<number | null>(null);
 
   const result = useLiveQuery(() =>
     audit.listAuditLogs({
@@ -23,11 +25,40 @@ export function AuditLogPage(): ReactNode {
   const actions = useLiveQuery(() => audit.listAuditActions());
   const targetTypes = useLiveQuery(() => audit.listAuditTargetTypes());
 
+  /**
+   * Exports everything the current filters match, not just the page on screen - an export
+   * that silently stopped at fifteen rows would be worse than no export at all.
+   */
+  function exportMatching(): void {
+    const matching = audit.listAuditLogs({
+      pageSize: 100,
+      ...(action ? { action } : {}),
+      ...(targetType ? { targetType } : {}),
+    });
+
+    const csv = toCsv(matching.items, [
+      { header: 'Timestamp', value: (entry) => entry.createdAt },
+      { header: 'Action', value: (entry) => entry.action },
+      { header: 'Actor', value: (entry) => entry.actorId },
+      { header: 'Target type', value: (entry) => entry.targetType },
+      { header: 'Target', value: (entry) => entry.targetId },
+      { header: 'Details', value: (entry) => entry.metadata },
+    ]);
+
+    downloadTextFile('audit-log.csv', csv, 'text/csv');
+    setExported(matching.items.length);
+  }
+
   return (
     <>
       <PageHeader
         title="Audit log"
         description="Append-only. Entries are written by the domain layer, not by the screens."
+        actions={
+          <button type="button" className="button" onClick={exportMatching}>
+            Export CSV
+          </button>
+        }
       />
 
       <Card>
@@ -38,6 +69,7 @@ export function AuditLogPage(): ReactNode {
               onChange={(event) => {
                 setAction(event.target.value);
                 setPage(1);
+                setExported(null);
               }}
             >
               <option value="">All actions</option>
@@ -54,6 +86,7 @@ export function AuditLogPage(): ReactNode {
               onChange={(event) => {
                 setTargetType(event.target.value);
                 setPage(1);
+                setExported(null);
               }}
             >
               <option value="">All targets</option>
@@ -65,6 +98,12 @@ export function AuditLogPage(): ReactNode {
             </select>
           </Field>
         </Toolbar>
+
+        {exported !== null && (
+          <SuccessNotice>
+            Exported {exported} {exported === 1 ? 'entry' : 'entries'} to audit-log.csv.
+          </SuccessNotice>
+        )}
 
         {result.items.length === 0 ? (
           <EmptyState>No entries match these filters.</EmptyState>
