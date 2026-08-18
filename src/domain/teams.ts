@@ -11,6 +11,7 @@ import {
 import { createId, createToken, nowIso } from './ids';
 import { paginate, sortNewestFirst, sortOldestFirst, type PaginatedResult } from './pagination';
 import type {
+  InviteStatus,
   TeamInviteRecord,
   TeamInviteView,
   TeamMemberView,
@@ -49,9 +50,34 @@ function toTeamView(team: TeamRecord): TeamView {
   return { id, name, slug, createdAt, updatedAt };
 }
 
+/**
+ * The status an invite actually has right now, rather than the one last written to it.
+ *
+ * A pending invite whose window has closed is already dead — presenting the token is refused
+ * — but nothing sweeps the tables to say so, so the stored row keeps reading PENDING until
+ * someone tries to accept it. Deriving the status on read is what keeps a screen honest:
+ * the row shows as expired, and the controls that only make sense for a live invite (its
+ * link, revoking it) stop being offered for one that can no longer be redeemed.
+ */
+export function effectiveInviteStatus(invite: TeamInviteRecord): InviteStatus {
+  if (invite.status === 'PENDING' && Date.parse(invite.expiresAt) <= Date.now()) {
+    return 'EXPIRED';
+  }
+  return invite.status;
+}
+
 function toInviteView(invite: TeamInviteRecord): TeamInviteView {
-  const { id, teamId, email, role, status, token, expiresAt, createdAt } = invite;
-  return { id, teamId, email, role, status, token, expiresAt, createdAt };
+  const { id, teamId, email, role, token, expiresAt, createdAt } = invite;
+  return {
+    id,
+    teamId,
+    email,
+    role,
+    status: effectiveInviteStatus(invite),
+    token,
+    expiresAt,
+    createdAt,
+  };
 }
 
 function getTeamRecordOrThrow(teamId: string): TeamRecord {
@@ -384,7 +410,8 @@ export function listInvites(
   const query = parseInput(listInvitesQuerySchema, rawQuery);
 
   const matching = getDatabase().invites.filter(
-    (invite) => invite.teamId === teamId && (!query.status || invite.status === query.status),
+    (invite) =>
+      invite.teamId === teamId && (!query.status || effectiveInviteStatus(invite) === query.status),
   );
 
   return paginate(sortNewestFirst(matching).map(toInviteView), query);
@@ -433,12 +460,10 @@ export function acceptInvite(actor: Actor, token: string): TeamWithRole {
     throw new NotFoundError('User not found');
   }
 
-  // A pending invite that has aged out is flipped to EXPIRED on the way past, so the list
-  // reflects reality rather than waiting for a sweep that never runs.
-  const isExpired =
-    invite.status === 'EXPIRED' ||
-    (invite.status === 'PENDING' && Date.parse(invite.expiresAt) < Date.now());
-  if (isExpired) {
+  // A pending invite that has aged out is flipped to EXPIRED on the way past, so the stored
+  // row catches up with what readers were already being shown.
+  const status = effectiveInviteStatus(invite);
+  if (status === 'EXPIRED') {
     if (invite.status === 'PENDING') {
       mutate(() => {
         invite.status = 'EXPIRED';
@@ -447,7 +472,7 @@ export function acceptInvite(actor: Actor, token: string): TeamWithRole {
     throw new BadRequestError('This invite has expired');
   }
 
-  if (invite.status !== 'PENDING') {
+  if (status !== 'PENDING') {
     throw new BadRequestError('This invite is no longer valid');
   }
 

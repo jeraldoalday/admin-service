@@ -4,8 +4,15 @@ import { useSession } from '@/app/sessionContext';
 import { useLiveQuery } from '@/app/store';
 import { PageHeader } from '@/components/Layout';
 import { Card, ErrorNotice, SuccessNotice } from '@/components/ui';
-import { teams, toErrorMessage } from '@/domain';
+import { teams, toErrorMessage, type InviteStatus } from '@/domain';
 import { relativeExpiry } from '@/lib/format';
+
+/** Why a link that resolves to a real invite still cannot be accepted. */
+const UNAVAILABLE: Record<Exclude<InviteStatus, 'PENDING'>, string> = {
+  ACCEPTED: 'This invite has already been accepted.',
+  REVOKED: 'This invite has been revoked.',
+  EXPIRED: 'This invite has expired. Ask the team to send a new one.',
+};
 
 /**
  * The landing page for an invite link. Accepting requires being signed in as the account the
@@ -45,6 +52,15 @@ export function AcceptInvitePage(): ReactNode {
           <SuccessNotice>
             You joined {accepted.name}. <Link to={`/teams/${accepted.id}`}>Open the team</Link>.
           </SuccessNotice>
+        ) : invite.status !== 'PENDING' ? (
+          // Offering the button and failing on the click told the reader nothing they could
+          // not have been told on arrival.
+          <>
+            <ErrorNotice error={UNAVAILABLE[invite.status]} />
+            <p>
+              <Link to="/teams">Back to your teams</Link>
+            </p>
+          </>
         ) : (
           <>
             <p>

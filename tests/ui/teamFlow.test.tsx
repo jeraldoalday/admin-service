@@ -155,6 +155,21 @@ describe('invites', () => {
     expect(screen.queryByRole('button', { name: 'Copy link' })).not.toBeInTheDocument();
   });
 
+  it('offers no link for an invite that has aged out, and says so', async () => {
+    const seeded = getDatabase().invites.find(
+      (candidate) => candidate.email === 'noor@example.com',
+    );
+    if (seeded) seeded.expiresAt = new Date(Date.now() - 1000).toISOString();
+
+    const { user } = openTeam(adminActor().id);
+    await user.click(screen.getByRole('button', { name: 'Invites' }));
+
+    const table = within(screen.getByRole('table'));
+    expect(table.getByText('EXPIRED')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Copy link' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Revoke' })).not.toBeInTheDocument();
+  });
+
   it('revokes a pending invite', async () => {
     const { user } = openTeam(adminActor().id);
     await user.click(screen.getByRole('button', { name: 'Invites' }));
@@ -190,6 +205,18 @@ describe('accepting an invite', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'This invite was issued to a different email address',
     );
+  });
+
+  it('explains a dead invite on arrival instead of on the click', async () => {
+    const admin = adminActor();
+    const platform = teamIdBySlug('platform');
+    const invite = teams.createInvite(admin, platform, { email: 'mira@example.com' });
+    teams.revokeInvite(admin, platform, invite.id);
+
+    renderApp({ route: `/invites/${invite.token}`, userId: miraActor().id });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('This invite has been revoked.');
+    expect(screen.queryByRole('button', { name: 'Accept invite' })).not.toBeInTheDocument();
   });
 
   it('sends an anonymous visitor to sign in first', () => {

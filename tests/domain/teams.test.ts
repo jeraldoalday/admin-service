@@ -181,6 +181,34 @@ describe('invites', () => {
     expect(teams.listInvites(admin, platform, { status: 'EXPIRED' }).total).toBe(1);
   });
 
+  it('reads as expired the moment its window closes, without waiting to be presented', () => {
+    const admin = adminActor();
+    const platform = teamIdBySlug('platform');
+    const invite = teams.createInvite(admin, platform, { email: 'stale@example.com' });
+
+    const stored = getDatabase().invites.find((candidate) => candidate.id === invite.id);
+    if (stored) stored.expiresAt = new Date(Date.now() - 1000).toISOString();
+
+    const listed = teams.listInvites(admin, platform).items.find((row) => row.id === invite.id);
+    expect(listed?.status).toBe('EXPIRED');
+    expect(teams.findInviteByToken(invite.token)?.status).toBe('EXPIRED');
+  });
+
+  it('leaves an aged-out invite out of the pending filter and inside the expired one', () => {
+    const admin = adminActor();
+    const platform = teamIdBySlug('platform');
+    const invite = teams.createInvite(admin, platform, { email: 'stale@example.com' });
+
+    const stored = getDatabase().invites.find((candidate) => candidate.id === invite.id);
+    if (stored) stored.expiresAt = new Date(Date.now() - 1000).toISOString();
+
+    const pending = teams.listInvites(admin, platform, { status: 'PENDING' }).items;
+    const expired = teams.listInvites(admin, platform, { status: 'EXPIRED' }).items;
+
+    expect(pending.map((row) => row.id)).not.toContain(invite.id);
+    expect(expired.map((row) => row.id)).toContain(invite.id);
+  });
+
   it('revokes only pending invites', () => {
     const admin = adminActor();
     const platform = teamIdBySlug('platform');
