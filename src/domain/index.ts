@@ -4,6 +4,20 @@
  * the rules can be tested — and reasoned about — on their own.
  */
 export * from './types';
+export type {
+  CreateApiKeyInput,
+  CreateInviteInput,
+  CreateTeamInput,
+  ListApiKeysQuery,
+  ListAuditLogsQuery,
+  ListInvitesQuery,
+  ListUsersQuery,
+  LoginInput,
+  RegisterInput,
+  SetMemberPermissionsInput,
+  UpdateTeamInput,
+  UpdateUserInput,
+} from './validation';
 export * from './errors';
 export * from './pagination';
 export {

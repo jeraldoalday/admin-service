@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { screen, within } from '@testing-library/react';
-import { getDatabase, users } from '@/domain';
+import { audit, getDatabase, users } from '@/domain';
 import { adminActor } from '../helpers';
 import { renderApp } from '../renderApp';
 
@@ -60,6 +60,47 @@ describe('the users screen', () => {
 
     expect(await table().findByText('Dana D.')).toBeInTheDocument();
     expect(table().getAllByText('ADMIN')).toHaveLength(2);
+  });
+
+  it('lets an admin rename their own account', async () => {
+    const { user } = renderAsAdmin();
+
+    await user.click(within(rowFor('Avery Admin')).getByRole('button', { name: 'Edit' }));
+
+    const nameField = screen.getByLabelText('Display name');
+    await user.clear(nameField);
+    await user.type(nameField, 'Avery A.');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    // Renaming yourself cannot lock you out, so it must not trip the self-guard that stops
+    // an admin changing their own role or deactivating themselves.
+    expect(await table().findByText('Avery A.')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('records only the fields that actually changed', async () => {
+    const { user } = renderAsAdmin();
+
+    await user.click(within(rowFor('Dana Diaz')).getByRole('button', { name: 'Edit' }));
+    const nameField = screen.getByLabelText('Display name');
+    await user.clear(nameField);
+    await user.type(nameField, 'Dana D.');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(audit.listAuditLogs({ action: 'user.updated' }).items[0]?.metadata).toEqual({
+      displayName: 'Dana D.',
+    });
+  });
+
+  it('closes without writing anything when nothing was edited', async () => {
+    const { user } = renderAsAdmin();
+    const before = audit.listAuditLogs({ action: 'user.updated' }).total;
+
+    await user.click(within(rowFor('Dana Diaz')).getByRole('button', { name: 'Edit' }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(audit.listAuditLogs({ action: 'user.updated' }).total).toBe(before);
   });
 
   it('will not let an admin demote themselves', async () => {

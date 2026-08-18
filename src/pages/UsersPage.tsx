@@ -4,7 +4,13 @@ import { useLiveQuery } from '@/app/store';
 import { DataTable, Pagination } from '@/components/DataTable';
 import { PageHeader } from '@/components/Layout';
 import { Badge, Card, EmptyState, ErrorNotice, Field, Modal, Toolbar } from '@/components/ui';
-import { toErrorMessage, users, type AdminUserView, type UserRole } from '@/domain';
+import {
+  toErrorMessage,
+  users,
+  type AdminUserView,
+  type UpdateUserInput,
+  type UserRole,
+} from '@/domain';
 import { formatDate } from '@/lib/format';
 
 type ActiveFilter = 'all' | 'true' | 'false';
@@ -180,8 +186,22 @@ function EditUserDialog({
   function handleSubmit(event: FormEvent): void {
     event.preventDefault();
     setError(null);
+
+    // Send only what actually changed. Submitting every field would make renaming your own
+    // account look like an attempt to change your own role, which the domain refuses, and
+    // would fill the audit entry with fields nobody touched.
+    const changes: UpdateUserInput = {};
+    if (displayName !== user.displayName) changes.displayName = displayName;
+    if (role !== user.role) changes.role = role;
+    if (isActive !== user.isActive) changes.isActive = isActive;
+
+    if (Object.keys(changes).length === 0) {
+      onClose();
+      return;
+    }
+
     try {
-      users.updateUser(actor, user.id, { displayName, role, isActive });
+      users.updateUser(actor, user.id, changes);
       onClose();
     } catch (caught) {
       setError(toErrorMessage(caught));
