@@ -203,6 +203,31 @@ export function deleteTeam(actor: Actor, teamId: string): void {
   });
 }
 
+/**
+ * Flips every pending invite whose window has closed to EXPIRED, and reports how many moved.
+ *
+ * Reads already derive this, so nothing on screen depends on the sweep having run. What it
+ * fixes is the stored rows drifting from the truth the screens show: the tables outlive the
+ * session that wrote them, and a row that still says PENDING a month after it died is a
+ * liability for anything that reads the database without going through the domain — an
+ * export, a migration, a future consumer. Running it once at boot is enough, since an invite
+ * issued during a session cannot outlive it by much.
+ */
+export function expireStaleInvites(now = Date.now()): number {
+  const stale = getDatabase().invites.filter(
+    (invite) => invite.status === 'PENDING' && Date.parse(invite.expiresAt) <= now,
+  );
+  if (stale.length === 0) return 0;
+
+  mutate(() => {
+    stale.forEach((invite) => {
+      invite.status = 'EXPIRED';
+    });
+  });
+
+  return stale.length;
+}
+
 export interface OwnershipReassignment {
   teamId: string;
   /** The member promoted to OWNER, or null when the team had nobody left and was deleted. */
