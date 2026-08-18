@@ -1,0 +1,116 @@
+import { recordAuditLog } from './audit';
+import { getDatabase, mutate } from './database';
+import { BadRequestError, NotFoundError } from './errors';
+import { requireAdmin, type Actor } from './guards';
+import { nowIso } from './ids';
+import { paginate, sortNewestFirst, type PaginatedResult } from './pagination';
+import type { AdminUserView, UserRecord } from './types';
+import {
+  listUsersQuerySchema,
+  parseInput,
+  updateUserSchema,
+  type ListUsersQuery,
+  type UpdateUserInput,
+} from './validation';
+
+function toAdminUserView(user: UserRecord): AdminUserView {
+  const { id, email, displayName, role, isActive, createdAt, updatedAt } = user;
+  return { id, email, displayName, role, isActive, createdAt, updatedAt };
+}
+
+export function listUsers(
+  actor: Actor,
+  rawQuery: ListUsersQuery = {},
+): PaginatedResult<AdminUserView> {
+  requireAdmin(actor);
+  const query = parseInput(listUsersQuerySchema, rawQuery);
+  const search = query.search?.toLowerCase();
+
+  const matching = getDatabase().users.filter((user) => {
+    if (query.role && user.role !== query.role) return false;
+    if (query.isActive !== undefined && user.isActive !== query.isActive) return false;
+    if (
+      search &&
+      !user.email.toLowerCase().includes(search) &&
+      !user.displayName.toLowerCase().includes(search)
+    ) {
+      return false;
+    }
+    return true;
+  });
+
+  return paginate(sortNewestFirst(matching).map(toAdminUserView), query);
+}
+
+function getUserRecordOrThrow(id: string): UserRecord {
+  const user = getDatabase().users.find((candidate) => candidate.id === id);
+  if (!user) {
+    throw new NotFoundError('User not found');
+  }
+  return user;
+}
+
+export function getUser(actor: Actor, id: string): AdminUserView {
+  requireAdmin(actor);
+  return toAdminUserView(getUserRecordOrThrow(id));
+}
+
+export function updateUser(actor: Actor, id: string, rawInput: UpdateUserInput): AdminUserView {
+  const admin = requireAdmin(actor);
+  const input = parseInput(updateUserSchema, rawInput);
+
+  // Guard against locking yourself out of the console you are standing in.
+  if (id === admin.id && (input.role !== undefined || input.isActive === false)) {
+    throw new BadRequestError(
+      'Admins cannot change their own role or deactivate their own account',
+    );
+  }
+
+  const existing = getUserRecordOrThrow(id);
+
+  const updated = mutate(() => {
+    if (input.displayName !== undefined) existing.displayName = input.displayName;
+    if (input.role !== undefined) existing.role = input.role;
+    if (input.isActive !== undefined) existing.isActive = input.isActive;
+    existing.updatedAt = nowIso();
+    return toAdminUserView(existing);
+  });
+
+  recordAuditLog({
+    actorId: admin.id,
+    action: 'user.updated',
+    targetType: 'user',
+    targetId: id,
+    metadata: input,
+  });
+
+  return updated;
+}
+
+/**
+ * Deletes a user along with the rows the SQLite schema used to cascade away for us — the
+ * team memberships and permission grants keyed to them. Invites are addressed to an email
+ * rather than a user id and are deliberately left alone, exactly as before.
+ */
+export function deleteUser(actor: Actor, id: string): void {
+  const admin = requireAdmin(actor);
+
+  if (id === admin.id) {
+    throw new BadRequestError('Admins cannot delete their own account');
+  }
+
+  getUserRecordOrThrow(id);
+
+  mutate((db) => {
+    db.users = db.users.filter((candidate) => candidate.id !== id);
+    db.memberships = db.memberships.filter((membership) => membership.userId !== id);
+    db.permissionGrants = db.permissionGrants.filter((grant) => grant.userId !== id);
+  });
+
+  recordAuditLog({
+    actorId: admin.id,
+    action: 'user.deleted',
+    targetType: 'user',
+    targetId: id,
+  });
+}
