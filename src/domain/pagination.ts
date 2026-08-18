@@ -27,10 +27,24 @@ export function buildPaginatedResult<T>(
   };
 }
 
-/** Applies page/pageSize to an already-ordered list, mirroring the old `skip`/`take` query. */
+/**
+ * Applies page/pageSize to an already-ordered list, mirroring the old `skip`/`take` query.
+ *
+ * A page past the end is clamped to the last one that exists rather than returning nothing:
+ * a list can shrink under a reader who is already on page three - delete the last row there,
+ * or narrow a filter - and an empty result would read as "nothing matches" when the truth is
+ * "that page is gone". The clamped page is reported back, so pagination controls stay
+ * anchored to a page that exists.
+ */
 export function paginate<T>(items: T[], input: PaginationInput): PaginatedResult<T> {
-  const skip = (input.page - 1) * input.pageSize;
-  return buildPaginatedResult(items.slice(skip, skip + input.pageSize), items.length, input);
+  const totalPages = Math.max(1, Math.ceil(items.length / input.pageSize));
+  const page = Math.min(Math.max(1, input.page), totalPages);
+  const skip = (page - 1) * input.pageSize;
+
+  return buildPaginatedResult(items.slice(skip, skip + input.pageSize), items.length, {
+    ...input,
+    page,
+  });
 }
 
 /**
