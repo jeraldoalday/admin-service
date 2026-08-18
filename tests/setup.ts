@@ -1,14 +1,25 @@
-import { afterAll, beforeEach } from 'vitest';
-import { prisma } from '../src/db/prisma.js';
+import '@testing-library/jest-dom/vitest';
+import { afterEach, beforeEach } from 'vitest';
+import { cleanup } from '@testing-library/react';
+import { attachStorage, buildSeedDatabase, replaceDatabase } from '@/domain';
 
-beforeEach(async () => {
-  await prisma.auditLog.deleteMany();
-  await prisma.teamInvite.deleteMany();
-  await prisma.teamMembership.deleteMany();
-  await prisma.team.deleteMany();
-  await prisma.user.deleteMany();
+/**
+ * Every test starts from the same freshly built demo dataset with persistence switched off,
+ * so the suite touches no files, no network, and no browser storage — and no test can leak
+ * state into the next one. The seed is built against the real clock rather than a frozen
+ * instant, because its records carry relative windows (an invite expires seven days after it
+ * is issued) that only stay meaningful next to a matching "now".
+ */
+beforeEach(() => {
+  attachStorage(null);
+  replaceDatabase(buildSeedDatabase());
+  try {
+    globalThis.localStorage?.clear();
+  } catch {
+    // jsdom always provides localStorage; a non-DOM environment simply has nothing to clear.
+  }
 });
 
-afterAll(async () => {
-  await prisma.$disconnect();
+afterEach(() => {
+  cleanup();
 });

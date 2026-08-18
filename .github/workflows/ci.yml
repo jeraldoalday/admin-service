@@ -17,23 +17,16 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version-file: '.nvmrc'
           cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Lint
-        run: npm run lint
-
-      - name: Format check
-        run: npm run format:check
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Test
-        run: npm test
+      # One script, so the pass that has to succeed here is the same one you can run before
+      # pushing: lint, formatting, types, and the suite under its coverage thresholds.
+      - name: Check
+        run: npm run check
 
       - name: Build
         run: npm run build

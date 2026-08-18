@@ -1,0 +1,210 @@
+import { z } from 'zod';
+import { BadRequestError } from './errors';
+import { DEFAULT_PAGE_SIZE } from './pagination';
+
+/**
+ * Input schemas carried over verbatim from the HTTP service. Validating in the browser keeps
+ * one description of what a valid team name or password is, shared by the forms and by the
+ * domain functions they call — the forms cannot drift from the rules the domain enforces.
+ */
+
+export const paginationSchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().positive().max(100).default(DEFAULT_PAGE_SIZE),
+});
+
+export const userRoleEnum = z.enum(['ADMIN', 'MEMBER']);
+export const teamRoleEnum = z.enum(['OWNER', 'ADMIN', 'MEMBER']);
+export const inviteStatusEnum = z.enum(['PENDING', 'ACCEPTED', 'REVOKED', 'EXPIRED']);
+export const apiKeyStatusEnum = z.enum(['ACTIVE', 'REVOKED']);
+export const teamPermissionEnum = z.enum([
+  'MANAGE_TEAM',
+  'MANAGE_MEMBERS',
+  'MANAGE_INVITES',
+  'MANAGE_PERMISSIONS',
+  'MANAGE_API_KEYS',
+]);
+
+// -- auth ------------------------------------------------------------------
+
+export const registerSchema = z.object({
+  email: z.string().trim().toLowerCase().email(),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+  displayName: z.string().trim().min(1).max(120),
+});
+export type RegisterInput = z.infer<typeof registerSchema>;
+
+export const loginSchema = z.object({
+  email: z.string().trim().toLowerCase().email(),
+  password: z.string().min(1, 'Password is required'),
+});
+export type LoginInput = z.infer<typeof loginSchema>;
+
+/**
+ * Self-service profile and password changes. These are the only writes an account can make
+ * to itself, and they are deliberately separate from the admin-facing `updateUserSchema`:
+ * that one can change a role and an active flag, which is exactly what somebody editing
+ * their own account must not be able to do.
+ */
+export const updateProfileSchema = z.object({
+  displayName: z.string().trim().min(1, 'Display name is required').max(120),
+});
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, 'Your current password is required'),
+    newPassword: z.string().min(8, 'Password must be at least 8 characters'),
+    confirmPassword: z.string().min(1, 'Confirm your new password'),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    path: ['confirmPassword'],
+    message: 'The new passwords do not match',
+  })
+  .refine((data) => data.newPassword !== data.currentPassword, {
+    path: ['newPassword'],
+    message: 'The new password must be different from the current one',
+  });
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+
+// -- users -----------------------------------------------------------------
+
+const userFilterFields = {
+  role: userRoleEnum.optional(),
+  isActive: z.boolean().optional(),
+  search: z.string().trim().min(1).max(200).optional(),
+};
+
+/** The filter set on its own, for reads that want every match rather than a page of them. */
+export const userFiltersSchema = z.object(userFilterFields);
+export type UserFilters = z.input<typeof userFiltersSchema>;
+
+export const listUsersQuerySchema = paginationSchema.extend(userFilterFields);
+export type ListUsersQuery = z.input<typeof listUsersQuerySchema>;
+
+export const updateUserSchema = z
+  .object({
+    displayName: z.string().trim().min(1).max(120).optional(),
+    role: userRoleEnum.optional(),
+    isActive: z.boolean().optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, {
+    message: 'At least one field must be provided',
+  });
+export type UpdateUserInput = z.infer<typeof updateUserSchema>;
+
+// -- teams -----------------------------------------------------------------
+
+export const createTeamSchema = z.object({
+  name: z.string().trim().min(1, 'Team name is required').max(120),
+});
+export type CreateTeamInput = z.infer<typeof createTeamSchema>;
+
+export const updateTeamSchema = createTeamSchema;
+export type UpdateTeamInput = z.infer<typeof updateTeamSchema>;
+
+export const updateMemberRoleSchema = z.object({ role: teamRoleEnum });
+
+export const createInviteSchema = z.object({
+  email: z.string().trim().toLowerCase().email(),
+  // Invites cannot hand out ownership; a team gets its owner by creation or promotion.
+  role: z.enum(['ADMIN', 'MEMBER']).default('MEMBER'),
+});
+export type CreateInviteInput = z.input<typeof createInviteSchema>;
+
+export const listInvitesQuerySchema = paginationSchema.extend({
+  status: inviteStatusEnum.optional(),
+});
+export type ListInvitesQuery = z.input<typeof listInvitesQuerySchema>;
+
+// -- permissions -----------------------------------------------------------
+
+export const setMemberPermissionsSchema = z.object({
+  permissions: z.array(teamPermissionEnum).max(5),
+});
+export type SetMemberPermissionsInput = z.infer<typeof setMemberPermissionsSchema>;
+
+// -- api keys --------------------------------------------------------------
+
+export const createApiKeySchema = z.object({
+  name: z.string().trim().min(1, 'Key name is required').max(120),
+  permissions: z.array(teamPermissionEnum).max(5).default([]),
+  expiresAt: z
+    .string()
+    .trim()
+    .min(1)
+    .refine((value) => !Number.isNaN(Date.parse(value)), 'expiresAt must be a valid date')
+    .refine((value) => Date.parse(value) > Date.now(), 'expiresAt must be in the future')
+    .optional(),
+});
+export type CreateApiKeyInput = z.input<typeof createApiKeySchema>;
+
+export const listApiKeysQuerySchema = paginationSchema.extend({
+  status: apiKeyStatusEnum.optional(),
+});
+export type ListApiKeysQuery = z.input<typeof listApiKeysQuerySchema>;
+
+// -- audit logs ------------------------------------------------------------
+
+const dateBoundary = z
+  .string()
+  .trim()
+  .min(1)
+  .refine((value) => !Number.isNaN(Date.parse(value)), 'must be a valid date');
+
+/**
+ * A calendar date names a whole day, not the instant it begins. Read as-is, a `to` of
+ * 2026-08-19 would exclude everything that happened on the nineteenth, which is not what
+ * anybody picking a date range means — so a date-only boundary is widened to cover its day.
+ * Entries are stored as UTC instants, and the boundaries are read the same way.
+ */
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+export function startOfBoundary(value: string): number {
+  return Date.parse(DATE_ONLY.test(value) ? `${value}T00:00:00.000Z` : value);
+}
+
+export function endOfBoundary(value: string): number {
+  return Date.parse(DATE_ONLY.test(value) ? `${value}T23:59:59.999Z` : value);
+}
+
+const auditFilterFields = {
+  action: z.string().trim().min(1).max(100).optional(),
+  targetType: z.string().trim().min(1).max(100).optional(),
+  from: dateBoundary.optional(),
+  to: dateBoundary.optional(),
+};
+
+function rangeIsOrdered(query: { from?: string | undefined; to?: string | undefined }): boolean {
+  if (!query.from || !query.to) return true;
+  return startOfBoundary(query.from) <= endOfBoundary(query.to);
+}
+
+const RANGE_MESSAGE = {
+  path: ['from'],
+  message: 'The start of the range must not be after its end',
+};
+
+/** The filter set on its own, for reads that want every match rather than a page of them. */
+export const auditFiltersSchema = z.object(auditFilterFields).refine(rangeIsOrdered, RANGE_MESSAGE);
+export type AuditLogFilters = z.input<typeof auditFiltersSchema>;
+
+export const listAuditLogsQuerySchema = paginationSchema
+  .extend(auditFilterFields)
+  .refine(rangeIsOrdered, RANGE_MESSAGE);
+export type ListAuditLogsQuery = z.input<typeof listAuditLogsQuerySchema>;
+
+/**
+ * Parses input and rethrows a validation failure as the same `BadRequestError` the API used
+ * to return, so callers handle one error type regardless of where the rejection came from.
+ */
+export function parseInput<S extends z.ZodType>(schema: S, input: unknown): z.output<S> {
+  const result = schema.safeParse(input);
+  if (!result.success) {
+    const issue = result.error.issues[0];
+    const path = issue?.path.join('.');
+    const message = issue ? `${path ? `${path}: ` : ''}${issue.message}` : 'Invalid input';
+    throw new BadRequestError(message, result.error.flatten());
+  }
+  return result.data;
+}

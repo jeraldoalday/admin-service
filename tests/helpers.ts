@@ -1,54 +1,56 @@
-import type { Express } from 'express';
-import request from 'supertest';
-import { prisma } from '../src/db/prisma.js';
+import { auth, getDatabase, teams, type Actor, type TeamPermission, type UserRole } from '@/domain';
+import { permissions } from '@/domain';
 
-export interface RegisteredUser {
-  id: string;
-  email: string;
-  password: string;
-  accessToken: string;
-  refreshToken: string;
+export const DEMO_PASSWORD = 'password123';
+
+/** Looks up a seeded account by email and returns it as an actor. */
+export function actorFor(email: string): Actor {
+  const user = getDatabase().users.find((candidate) => candidate.email === email);
+  if (!user) {
+    throw new Error(`No seeded user with email ${email}`);
+  }
+  return { id: user.id, role: user.role };
 }
 
-let counter = 0;
+export const adminActor = (): Actor => actorFor('admin@example.com');
+export const danaActor = (): Actor => actorFor('dana@example.com');
+export const rajActor = (): Actor => actorFor('raj@example.com');
+export const miraActor = (): Actor => actorFor('mira@example.com');
 
-export async function registerUser(
-  app: Express,
-  overrides: Partial<{ email: string; password: string; displayName: string }> = {},
-): Promise<RegisteredUser> {
-  counter += 1;
-  const email = overrides.email ?? `user-${counter}@example.com`;
-  const password = overrides.password ?? 'correcthorsebattery';
-  const displayName = overrides.displayName ?? 'Test User';
-
-  const res = await request(app).post('/auth/register').send({ email, password, displayName });
-
-  return {
-    id: res.body.user.id as string,
-    email,
-    password,
-    accessToken: res.body.tokens.accessToken as string,
-    refreshToken: res.body.tokens.refreshToken as string,
-  };
+export function teamIdBySlug(slug: string): string {
+  const team = getDatabase().teams.find((candidate) => candidate.slug === slug);
+  if (!team) {
+    throw new Error(`No seeded team with slug ${slug}`);
+  }
+  return team.id;
 }
 
-// Registering always creates a MEMBER; promote via Prisma directly, then
-// re-login so the returned access token carries the updated ADMIN role
-// (the role is embedded in the JWT at issuance time).
-export async function registerAdmin(
-  app: Express,
-  overrides: Partial<{ email: string; password: string; displayName: string }> = {},
-): Promise<RegisteredUser> {
-  const user = await registerUser(app, overrides);
-  await prisma.user.update({ where: { id: user.id }, data: { role: 'ADMIN' } });
+/** Registers an extra account for tests that need a user outside the seed. */
+export function createUser(
+  email: string,
+  displayName = 'Test User',
+  role: UserRole = 'MEMBER',
+): Actor {
+  const user = auth.registerUser({ email, password: DEMO_PASSWORD, displayName });
+  return { id: user.id, role };
+}
 
-  const loginRes = await request(app)
-    .post('/auth/login')
-    .send({ email: user.email, password: user.password });
+/** Puts a user on a team by issuing and accepting an invite, the way the UI would. */
+export function joinTeam(
+  inviter: Actor,
+  teamId: string,
+  invitee: Actor,
+  inviteeEmail: string,
+): void {
+  const invite = teams.createInvite(inviter, teamId, { email: inviteeEmail, role: 'MEMBER' });
+  teams.acceptInvite(invitee, invite.token);
+}
 
-  return {
-    ...user,
-    accessToken: loginRes.body.tokens.accessToken as string,
-    refreshToken: loginRes.body.tokens.refreshToken as string,
-  };
+export function grant(
+  granter: Actor,
+  teamId: string,
+  userId: string,
+  granted: TeamPermission[],
+): void {
+  permissions.setMemberPermissionGrants(granter, teamId, userId, granted);
 }

@@ -5,9 +5,4 @@ coverage/
 .env
 .env.local
 .DS_Store
-/prisma/dev.db
-/prisma/dev.db-journal
-/prisma/test.db
-/prisma/test.db-journal
-
-/src/generated/prisma
+tsconfig.tsbuildinfo
