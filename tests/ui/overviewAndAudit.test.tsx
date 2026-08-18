@@ -89,6 +89,33 @@ describe('the audit log screen', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Exported 2 entries');
   });
 
+  it('narrows the log to a date range and clears back out again', async () => {
+    const { user } = renderApp({ route: '/audit-logs', userId: adminActor().id });
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+    await user.type(screen.getByLabelText('From'), tomorrow);
+
+    expect(await screen.findByText('No entries match these filters.')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Clear filters' }));
+
+    expect(await screen.findByRole('table')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument();
+  });
+
+  it('reports a range that ends before it starts instead of falling over', async () => {
+    const { user } = renderApp({ route: '/audit-logs', userId: adminActor().id });
+
+    await user.type(screen.getByLabelText('From'), '2026-08-19');
+    await user.type(screen.getByLabelText('To'), '2026-08-18');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The start of the range must not be after its end',
+    );
+    // The controls keep what was typed, so the reader can fix the end date they got wrong.
+    expect(screen.getByLabelText('From')).toHaveValue('2026-08-19');
+  });
+
   it('says so when a filter matches nothing', async () => {
     const { user } = renderApp({ route: '/audit-logs', userId: adminActor().id });
 

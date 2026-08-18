@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from 'react';
-import { useLiveQuery } from '@/app/store';
+import { useLiveQuery, useLiveResult } from '@/app/store';
 import { DataTable, Pagination } from '@/components/DataTable';
 import { PageHeader } from '@/components/Layout';
-import { Card, EmptyState, Field, SuccessNotice, Toolbar } from '@/components/ui';
-import { audit } from '@/domain';
+import { Card, EmptyState, ErrorNotice, Field, SuccessNotice, Toolbar } from '@/components/ui';
+import { audit, toErrorMessage, type AuditLogFilters } from '@/domain';
 import { toCsv, downloadTextFile } from '@/lib/csv';
 import { formatDateTime } from '@/lib/format';
 
@@ -12,18 +12,40 @@ export function AuditLogPage(): ReactNode {
   const [page, setPage] = useState(1);
   const [action, setAction] = useState('');
   const [targetType, setTargetType] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   const [exported, setExported] = useState<number | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
-  const result = useLiveQuery(() =>
-    audit.listAuditLogs({
-      page,
-      pageSize: 15,
-      ...(action ? { action } : {}),
-      ...(targetType ? { targetType } : {}),
-    }),
-  );
+  const filters: AuditLogFilters = {
+    ...(action ? { action } : {}),
+    ...(targetType ? { targetType } : {}),
+    ...(from ? { from } : {}),
+    ...(to ? { to } : {}),
+  };
+  const hasFilters = Object.keys(filters).length > 0;
+
+  // A range that ends before it starts is a rejection, not a crash: the domain refuses it and
+  // the screen says so while leaving the controls exactly as the reader left them.
+  const result = useLiveResult(() => audit.listAuditLogs({ ...filters, page, pageSize: 15 }));
   const actions = useLiveQuery(() => audit.listAuditActions());
   const targetTypes = useLiveQuery(() => audit.listAuditTargetTypes());
+
+  function changeFilter(apply: () => void): void {
+    apply();
+    setPage(1);
+    setExported(null);
+    setExportError(null);
+  }
+
+  function clearFilters(): void {
+    changeFilter(() => {
+      setAction('');
+      setTargetType('');
+      setFrom('');
+      setTo('');
+    });
+  }
 
   /**
    * Exports everything the current filters match, not just the page on screen - an export
@@ -31,22 +53,25 @@ export function AuditLogPage(): ReactNode {
    * through the unpaginated list for the same reason: a page caps out at a hundred rows.
    */
   function exportMatching(): void {
-    const matching = audit.listAllAuditLogs({
-      ...(action ? { action } : {}),
-      ...(targetType ? { targetType } : {}),
-    });
+    setExportError(null);
+    try {
+      const matching = audit.listAllAuditLogs(filters);
 
-    const csv = toCsv(matching, [
-      { header: 'Timestamp', value: (entry) => entry.createdAt },
-      { header: 'Action', value: (entry) => entry.action },
-      { header: 'Actor', value: (entry) => entry.actorId },
-      { header: 'Target type', value: (entry) => entry.targetType },
-      { header: 'Target', value: (entry) => entry.targetId },
-      { header: 'Details', value: (entry) => entry.metadata },
-    ]);
+      const csv = toCsv(matching, [
+        { header: 'Timestamp', value: (entry) => entry.createdAt },
+        { header: 'Action', value: (entry) => entry.action },
+        { header: 'Actor', value: (entry) => entry.actorId },
+        { header: 'Target type', value: (entry) => entry.targetType },
+        { header: 'Target', value: (entry) => entry.targetId },
+        { header: 'Details', value: (entry) => entry.metadata },
+      ]);
 
-    downloadTextFile('audit-log.csv', csv, 'text/csv');
-    setExported(matching.length);
+      downloadTextFile('audit-log.csv', csv, 'text/csv');
+      setExported(matching.length);
+    } catch (caught) {
+      setExported(null);
+      setExportError(toErrorMessage(caught));
+    }
   }
 
   return (
@@ -66,11 +91,7 @@ export function AuditLogPage(): ReactNode {
           <Field label="Action">
             <select
               value={action}
-              onChange={(event) => {
-                setAction(event.target.value);
-                setPage(1);
-                setExported(null);
-              }}
+              onChange={(event) => changeFilter(() => setAction(event.target.value))}
             >
               <option value="">All actions</option>
               {actions.map((value) => (
@@ -83,11 +104,7 @@ export function AuditLogPage(): ReactNode {
           <Field label="Target type">
             <select
               value={targetType}
-              onChange={(event) => {
-                setTargetType(event.target.value);
-                setPage(1);
-                setExported(null);
-              }}
+              onChange={(event) => changeFilter(() => setTargetType(event.target.value))}
             >
               <option value="">All targets</option>
               {targetTypes.map((value) => (
@@ -97,7 +114,28 @@ export function AuditLogPage(): ReactNode {
               ))}
             </select>
           </Field>
+          <Field label="From">
+            <input
+              type="date"
+              value={from}
+              onChange={(event) => changeFilter(() => setFrom(event.target.value))}
+            />
+          </Field>
+          <Field label="To" hint="Both dates count as whole days.">
+            <input
+              type="date"
+              value={to}
+              onChange={(event) => changeFilter(() => setTo(event.target.value))}
+            />
+          </Field>
+          {hasFilters && (
+            <button type="button" className="button button--ghost" onClick={clearFilters}>
+              Clear filters
+            </button>
+          )}
         </Toolbar>
+
+        <ErrorNotice error={result.error?.message ?? exportError} />
 
         {exported !== null && (
           <SuccessNotice>
@@ -105,29 +143,31 @@ export function AuditLogPage(): ReactNode {
           </SuccessNotice>
         )}
 
-        {result.items.length === 0 ? (
+        {!result.data ? null : result.data.items.length === 0 ? (
           <EmptyState>No entries match these filters.</EmptyState>
         ) : (
-          <DataTable columns={['When', 'Action', 'Target', 'Details']}>
-            {result.items.map((entry) => (
-              <tr key={entry.id}>
-                <td className="cell--muted">{formatDateTime(entry.createdAt)}</td>
-                <td>
-                  <code>{entry.action}</code>
-                </td>
-                <td className="cell--muted">
-                  {entry.targetType}
-                  {entry.targetId ? ` · ${entry.targetId}` : ''}
-                </td>
-                <td className="cell--muted">
-                  {entry.metadata ? <code>{JSON.stringify(entry.metadata)}</code> : '—'}
-                </td>
-              </tr>
-            ))}
-          </DataTable>
-        )}
+          <>
+            <DataTable columns={['When', 'Action', 'Target', 'Details']}>
+              {result.data.items.map((entry) => (
+                <tr key={entry.id}>
+                  <td className="cell--muted">{formatDateTime(entry.createdAt)}</td>
+                  <td>
+                    <code>{entry.action}</code>
+                  </td>
+                  <td className="cell--muted">
+                    {entry.targetType}
+                    {entry.targetId ? ` · ${entry.targetId}` : ''}
+                  </td>
+                  <td className="cell--muted">
+                    {entry.metadata ? <code>{JSON.stringify(entry.metadata)}</code> : '—'}
+                  </td>
+                </tr>
+              ))}
+            </DataTable>
 
-        <Pagination result={result} onPageChange={setPage} />
+            <Pagination result={result.data} onPageChange={setPage} />
+          </>
+        )}
       </Card>
     </>
   );
