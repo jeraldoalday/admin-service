@@ -2,7 +2,15 @@ import { getDatabase, mutate } from './database';
 import { createId, nowIso } from './ids';
 import { paginate, sortNewestFirst, type PaginatedResult } from './pagination';
 import type { AuditLogRecord, AuditLogView } from './types';
-import { listAuditLogsQuerySchema, parseInput, type ListAuditLogsQuery } from './validation';
+import {
+  auditFiltersSchema,
+  endOfBoundary,
+  listAuditLogsQuerySchema,
+  parseInput,
+  startOfBoundary,
+  type AuditLogFilters,
+  type ListAuditLogsQuery,
+} from './validation';
 
 export interface RecordAuditLogInput {
   actorId: string | null;
@@ -30,14 +38,20 @@ export function recordAuditLog(input: RecordAuditLogInput): void {
   });
 }
 
-interface AuditFilters {
+interface ParsedFilters {
   action?: string | undefined;
   targetType?: string | undefined;
+  from?: string | undefined;
+  to?: string | undefined;
 }
 
-function matchesFilters(log: AuditLogRecord, filters: AuditFilters): boolean {
+function matchesFilters(log: AuditLogRecord, filters: ParsedFilters): boolean {
   if (filters.action && log.action !== filters.action) return false;
   if (filters.targetType && log.targetType !== filters.targetType) return false;
+
+  const at = Date.parse(log.createdAt);
+  if (filters.from && at < startOfBoundary(filters.from)) return false;
+  if (filters.to && at > endOfBoundary(filters.to)) return false;
   return true;
 }
 
@@ -54,7 +68,8 @@ export function listAuditLogs(rawQuery: ListAuditLogsQuery = {}): PaginatedResul
  * hundred rows by the pagination schema, so an export that asked for one page stopped at a
  * hundred entries while telling the reader it covered everything the filters matched.
  */
-export function listAllAuditLogs(filters: AuditFilters = {}): AuditLogView[] {
+export function listAllAuditLogs(rawFilters: AuditLogFilters = {}): AuditLogView[] {
+  const filters = parseInput(auditFiltersSchema, rawFilters);
   return sortNewestFirst(getDatabase().auditLogs.filter((log) => matchesFilters(log, filters)));
 }
 

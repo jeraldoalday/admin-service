@@ -140,10 +140,52 @@ export type ListApiKeysQuery = z.input<typeof listApiKeysQuerySchema>;
 
 // -- audit logs ------------------------------------------------------------
 
-export const listAuditLogsQuerySchema = paginationSchema.extend({
+const dateBoundary = z
+  .string()
+  .trim()
+  .min(1)
+  .refine((value) => !Number.isNaN(Date.parse(value)), 'must be a valid date');
+
+/**
+ * A calendar date names a whole day, not the instant it begins. Read as-is, a `to` of
+ * 2026-08-19 would exclude everything that happened on the nineteenth, which is not what
+ * anybody picking a date range means — so a date-only boundary is widened to cover its day.
+ * Entries are stored as UTC instants, and the boundaries are read the same way.
+ */
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+export function startOfBoundary(value: string): number {
+  return Date.parse(DATE_ONLY.test(value) ? `${value}T00:00:00.000Z` : value);
+}
+
+export function endOfBoundary(value: string): number {
+  return Date.parse(DATE_ONLY.test(value) ? `${value}T23:59:59.999Z` : value);
+}
+
+const auditFilterFields = {
   action: z.string().trim().min(1).max(100).optional(),
   targetType: z.string().trim().min(1).max(100).optional(),
-});
+  from: dateBoundary.optional(),
+  to: dateBoundary.optional(),
+};
+
+function rangeIsOrdered(query: { from?: string | undefined; to?: string | undefined }): boolean {
+  if (!query.from || !query.to) return true;
+  return startOfBoundary(query.from) <= endOfBoundary(query.to);
+}
+
+const RANGE_MESSAGE = {
+  path: ['from'],
+  message: 'The start of the range must not be after its end',
+};
+
+/** The filter set on its own, for reads that want every match rather than a page of them. */
+export const auditFiltersSchema = z.object(auditFilterFields).refine(rangeIsOrdered, RANGE_MESSAGE);
+export type AuditLogFilters = z.input<typeof auditFiltersSchema>;
+
+export const listAuditLogsQuerySchema = paginationSchema
+  .extend(auditFilterFields)
+  .refine(rangeIsOrdered, RANGE_MESSAGE);
 export type ListAuditLogsQuery = z.input<typeof listAuditLogsQuerySchema>;
 
 /**

@@ -62,6 +62,40 @@ describe('the audit log', () => {
     expect(audit.listAllAuditLogs()).toHaveLength(audit.listAuditLogs({ pageSize: 100 }).total);
   });
 
+  it('filters by a date range, counting a bare date as the whole day it names', () => {
+    const admin = adminActor();
+    teams.updateTeam(admin, teamIdBySlug('platform'), { name: 'Renamed' });
+
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+    // The entry was just written, so a range ending today has to include it — which it only
+    // does if the boundary covers the whole day rather than the instant it starts.
+    expect(audit.listAuditLogs({ from: today, to: today }).total).toBe(1);
+    expect(audit.listAuditLogs({ from: yesterday }).total).toBe(1);
+    expect(audit.listAuditLogs({ to: yesterday }).total).toBe(4); // the seeded backdated entries
+    expect(audit.listAuditLogs({ from: tomorrow }).total).toBe(0);
+  });
+
+  it('combines a date range with the other filters', () => {
+    const admin = adminActor();
+    teams.updateTeam(admin, teamIdBySlug('platform'), { name: 'Renamed' });
+    users.updateUser(admin, danaActor().id, { displayName: 'Dana D.' });
+
+    const today = new Date().toISOString().slice(0, 10);
+
+    expect(audit.listAuditLogs({ from: today, action: 'team.updated' }).total).toBe(1);
+    expect(audit.listAllAuditLogs({ from: today })).toHaveLength(2);
+  });
+
+  it('refuses a range that ends before it starts, and a date it cannot read', () => {
+    expect(() => audit.listAuditLogs({ from: '2026-08-19', to: '2026-08-18' })).toThrow(
+      'The start of the range must not be after its end',
+    );
+    expect(() => audit.listAuditLogs({ from: 'last tuesday' })).toThrow('must be a valid date');
+  });
+
   it('offers the distinct actions and target types present, for filter menus', () => {
     expect(audit.listAuditActions()).toEqual([
       'api_key.created',
