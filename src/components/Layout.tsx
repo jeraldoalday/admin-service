@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useSession } from '@/app/sessionContext';
+import { clearStoredDatabase, seedDatabase } from '@/domain';
 
 interface NavItem {
   to: string;
@@ -18,6 +19,20 @@ const NAV_ITEMS: NavItem[] = [
 /** The signed-in shell: navigation on the left, the active screen on the right. */
 export function Layout(): ReactNode {
   const { user, signOut } = useSession();
+  const [confirmingReset, setConfirmingReset] = useState(false);
+
+  /**
+   * Puts the console back to the dataset a first-time visitor sees. This is a demo that
+   * persists everything locally, so there is otherwise no way back from an experiment short
+   * of clearing site data by hand. Signing out afterwards is not optional: the session points
+   * at a user id that the reseeded tables no longer contain.
+   */
+  function resetDemoData(): void {
+    clearStoredDatabase();
+    seedDatabase();
+    setConfirmingReset(false);
+    signOut();
+  }
 
   return (
     <div className="shell">
@@ -49,6 +64,35 @@ export function Layout(): ReactNode {
             </button>
           </div>
         )}
+        <div className="shell__reset">
+          {confirmingReset ? (
+            <>
+              <p className="shell__reset-warning">
+                This discards everything in this browser and signs you out.
+              </p>
+              <div className="cell--actions">
+                <button type="button" className="button button--danger" onClick={resetDemoData}>
+                  Confirm reset
+                </button>
+                <button
+                  type="button"
+                  className="button button--ghost"
+                  onClick={() => setConfirmingReset(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="button button--ghost"
+              onClick={() => setConfirmingReset(true)}
+            >
+              Reset demo data
+            </button>
+          )}
+        </div>
       </aside>
       <main className="shell__main">
         <Outlet />
