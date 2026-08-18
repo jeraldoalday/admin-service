@@ -4,6 +4,7 @@ import { BadRequestError, NotFoundError } from './errors';
 import { requireAdmin, type Actor } from './guards';
 import { nowIso } from './ids';
 import { paginate, sortNewestFirst, type PaginatedResult } from './pagination';
+import { reassignTeamsOwnedSolelyBy } from './teams';
 import type { AdminUserView, UserRecord } from './types';
 import {
   listUsersQuerySchema,
@@ -91,6 +92,9 @@ export function updateUser(actor: Actor, id: string, rawInput: UpdateUserInput):
  * Deletes a user along with the rows the SQLite schema used to cascade away for us — the
  * team memberships and permission grants keyed to them. Invites are addressed to an email
  * rather than a user id and are deliberately left alone, exactly as before.
+ *
+ * Any team the account was the only owner of is handed to the member left longest behind
+ * first, so the deletion cannot strand a team with nobody able to administer it.
  */
 export function deleteUser(actor: Actor, id: string): void {
   const admin = requireAdmin(actor);
@@ -100,6 +104,7 @@ export function deleteUser(actor: Actor, id: string): void {
   }
 
   getUserRecordOrThrow(id);
+  const reassignments = reassignTeamsOwnedSolelyBy(admin.id, id);
 
   mutate((db) => {
     db.users = db.users.filter((candidate) => candidate.id !== id);
@@ -112,5 +117,6 @@ export function deleteUser(actor: Actor, id: string): void {
     action: 'user.deleted',
     targetType: 'user',
     targetId: id,
+    ...(reassignments.length > 0 ? { metadata: { reassignedTeams: reassignments } } : {}),
   });
 }

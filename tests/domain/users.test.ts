@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { audit, getDatabase, teams, users } from '@/domain';
-import { adminActor, danaActor, teamIdBySlug } from '../helpers';
+import { apiKeys, audit, getDatabase, teams, users } from '@/domain';
+import { adminActor, createUser, danaActor, joinTeam, miraActor, teamIdBySlug } from '../helpers';
 
 describe('listing users', () => {
   it('is refused for non-admins', () => {
@@ -93,6 +93,66 @@ describe('deleting a user', () => {
     expect(teams.listTeamMembers(admin, platform).total).toBe(2);
     expect(getDatabase().permissionGrants).toHaveLength(0);
     expect(users.listUsers(admin).total).toBe(4);
+  });
+
+  it('hands a team the deleted account solely owned to the member left behind', () => {
+    const admin = adminActor();
+    const dana = danaActor();
+    const growth = teamIdBySlug('growth');
+    const mira = getDatabase().users.find((user) => user.email === 'mira@example.com');
+
+    // Dana is the only OWNER of Growth, and Mira is the only other member.
+    users.deleteUser(admin, dana.id);
+
+    const membership = getDatabase().memberships.find(
+      (candidate) => candidate.teamId === growth && candidate.userId === mira?.id,
+    );
+    expect(membership?.role).toBe('OWNER');
+    expect(getDatabase().teams.some((team) => team.id === growth)).toBe(true);
+  });
+
+  it('prefers a team ADMIN over a longer-standing plain member', () => {
+    const admin = adminActor();
+    const growth = teamIdBySlug('growth');
+    const dana = danaActor();
+    const newcomer = createUser('newcomer@example.com', 'Newcomer');
+    joinTeam(dana, growth, newcomer, 'newcomer@example.com');
+    teams.updateMemberRole(dana, growth, newcomer.id, 'ADMIN');
+
+    users.deleteUser(admin, dana.id);
+
+    const promoted = getDatabase().memberships.find(
+      (candidate) => candidate.teamId === growth && candidate.userId === newcomer.id,
+    );
+    expect(promoted?.role).toBe('OWNER');
+  });
+
+  it('deletes a team the account solely owned and nobody else was in', () => {
+    const admin = adminActor();
+    const mira = miraActor();
+    const solo = teams.createTeam(mira, { name: 'Solo' });
+    const key = apiKeys.createApiKey(mira, solo.id, { name: 'ci' });
+
+    users.deleteUser(admin, mira.id);
+
+    expect(getDatabase().teams.some((team) => team.id === solo.id)).toBe(false);
+    expect(getDatabase().apiKeys.some((candidate) => candidate.id === key.apiKey.id)).toBe(false);
+    expect(audit.listAllAuditLogs({ action: 'team.deleted' })).toHaveLength(1);
+  });
+
+  it('leaves a team alone when it still has another owner', () => {
+    const admin = adminActor();
+    const platform = teamIdBySlug('platform');
+    const dana = danaActor();
+    teams.updateMemberRole(admin, platform, dana.id, 'OWNER');
+
+    users.deleteUser(admin, dana.id);
+
+    const remaining = getDatabase().memberships.filter(
+      (candidate) => candidate.teamId === platform && candidate.role === 'OWNER',
+    );
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]?.userId).toBe(admin.id);
   });
 
   it('stops an admin from deleting their own account', () => {

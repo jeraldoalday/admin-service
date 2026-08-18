@@ -203,6 +203,84 @@ export function deleteTeam(actor: Actor, teamId: string): void {
   });
 }
 
+export interface OwnershipReassignment {
+  teamId: string;
+  /** The member promoted to OWNER, or null when the team had nobody left and was deleted. */
+  newOwnerId: string | null;
+}
+
+/**
+ * Keeps every team owned when a user leaves the platform.
+ *
+ * Deleting a user used to drop their memberships wholesale, which quietly stranded any team
+ * they were the only owner of: a team with no owner cannot be renamed, cannot be deleted, and
+ * cannot promote anybody, so the rules that protect the last owner turned into a trap the
+ * moment that owner's account went away. The longest-standing member left behind is promoted
+ * instead, preferring a team ADMIN over a plain MEMBER since they already hold the
+ * permissions the role carries. A team with nobody left is deleted along with its rows —
+ * there is no one to hand it to, and an empty team is not a thing anyone can reach.
+ *
+ * Unguarded on purpose: it runs inside the admin-guarded delete, and takes the acting admin
+ * so the entries it writes are attributed to the person who caused them.
+ */
+export function reassignTeamsOwnedSolelyBy(
+  actorId: string,
+  userId: string,
+): OwnershipReassignment[] {
+  const soleOwnerships = getDatabase().memberships.filter(
+    (membership) =>
+      membership.userId === userId &&
+      membership.role === 'OWNER' &&
+      countOwners(membership.teamId) === 1,
+  );
+
+  return soleOwnerships.map((ownership) => {
+    const teamId = ownership.teamId;
+    const successor = getDatabase()
+      .memberships.filter(
+        (membership) => membership.teamId === teamId && membership.userId !== userId,
+      )
+      .sort((a, b) => {
+        if (a.role !== b.role) return a.role === 'ADMIN' ? -1 : 1;
+        return a.createdAt.localeCompare(b.createdAt);
+      })[0];
+
+    if (!successor) {
+      mutate((db) => {
+        db.teams = db.teams.filter((team) => team.id !== teamId);
+        db.memberships = db.memberships.filter((membership) => membership.teamId !== teamId);
+        db.invites = db.invites.filter((invite) => invite.teamId !== teamId);
+        db.permissionGrants = db.permissionGrants.filter((grant) => grant.teamId !== teamId);
+        db.apiKeys = db.apiKeys.filter((key) => key.teamId !== teamId);
+      });
+
+      recordAuditLog({
+        actorId,
+        action: 'team.deleted',
+        targetType: 'team',
+        targetId: teamId,
+        metadata: { reason: 'last_owner_deleted' },
+      });
+
+      return { teamId, newOwnerId: null };
+    }
+
+    mutate(() => {
+      successor.role = 'OWNER';
+    });
+
+    recordAuditLog({
+      actorId,
+      action: 'team.member.role_updated',
+      targetType: 'team_membership',
+      targetId: `${teamId}:${successor.userId}`,
+      metadata: { role: 'OWNER', reason: 'previous_owner_deleted' },
+    });
+
+    return { teamId, newOwnerId: successor.userId };
+  });
+}
+
 /**
  * Unguarded member read, shared by the member-facing listing and the API-key-authenticated
  * service read — the two differ only in how the caller proves they may see the team.
