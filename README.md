@@ -25,7 +25,8 @@ npm run dev     # http://localhost:5173
 ```
 
 Demo data is seeded on first run. Sign in as `admin@example.com` — every seeded account
-shares the password `password123`. Clearing site data resets the console to that seed.
+shares the password `password123`. Everything you do persists to the browser; **Reset demo
+data** in the sidebar puts it back to the seeded dataset and signs you out.
 
 ## Scripts
 
@@ -39,7 +40,7 @@ shares the password `password123`. Clearing site data resets the console to that
 | `npm run typecheck`               | `tsc` with no emit                          |
 | `npm test`                        | Run the test suite once                     |
 | `npm run test:watch`              | Run the test suite in watch mode            |
-| `npm run test:coverage`           | Run the suite with a coverage report        |
+| `npm run test:coverage`           | Coverage report, with thresholds enforced   |
 
 ## Screens
 
@@ -75,6 +76,9 @@ signed-in user can create a team and becomes its `OWNER`. Team roles (`OWNER`/`A
 only mean something inside that team. A team always needs at least one owner — the last one
 cannot be demoted, removed, or leave. Invites are single-use tokens tied to an email address,
 expire after seven days, and can only be accepted while signed in as the address they name.
+There is no mail transport, so a pending invite's link stays retrievable from the invites tab
+for as long as it is valid; accepted and revoked invites offer none, because their links are
+dead.
 
 **Permissions** add resource-scoped access within a team, independent of the coarse team role.
 There are five: `MANAGE_TEAM`, `MANAGE_MEMBERS`, `MANAGE_INVITES`, `MANAGE_PERMISSIONS`, and
@@ -93,7 +97,10 @@ machine-facing read, so those guarantees are visible rather than merely document
 
 **The audit log** is append-only, written by the domain layer rather than by the screens, which
 is what makes it a complete record instead of a sample. Every user, team, membership, invite,
-permission, and API key mutation lands in it.
+permission, and API key mutation lands in it. It exports to CSV — everything the current
+filters match, not just the page on screen — with fields quoted per RFC 4180 and values that
+begin with `=`, `+`, `-`, or `@` prefixed, so a spreadsheet reads a user-chosen display name
+as text rather than as a formula.
 
 Failures use the same error types the rules always had — `BadRequestError`, `Unauthorized`,
 `Forbidden`, `NotFound`, `Conflict` — and screens render them in place instead of unmounting.
@@ -113,7 +120,9 @@ src/
     store.ts             Subscribes screens to the store's revision counter
   components/            Layout, table, and form primitives
   pages/                 One module per screen; team/ holds the team tabs
-  lib/format.ts          Date and permission formatting
+  lib/
+    format.ts            Date and permission formatting
+    csv.ts               RFC 4180 serialisation for exports
   domain/
     types.ts             Entities, roles, permissions, role defaults
     database.ts          The tables, persistence, and change notification
@@ -139,6 +148,10 @@ files, no network, and no browser storage, and no test can leak state into the n
 tests mount the real application — real routes, real session provider, real domain layer — and
 drive it the way a person would; nothing is mocked. The SHA-256 implementation is checked
 against `node:crypto` directly, since API key lookup depends on the two agreeing.
+
+`npm run test:coverage` reports on the domain and app layers and fails below its thresholds —
+currently around 96% of statements and 90% of branches. The screens are covered through the
+whole-app tests rather than by chasing a number.
 
 ## Status
 
