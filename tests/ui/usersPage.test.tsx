@@ -137,6 +137,56 @@ describe('the users screen', () => {
   });
 });
 
+describe('the edit dialog', () => {
+  it('moves focus into the dialog and back to the control that opened it', async () => {
+    const { user } = renderAsAdmin();
+    const openButton = within(rowFor('Dana Diaz')).getByRole('button', { name: 'Edit' });
+
+    await user.click(openButton);
+    expect(screen.getByRole('dialog')).toHaveFocus();
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(openButton).toHaveFocus();
+  });
+
+  it('closes on Escape', async () => {
+    const { user } = renderAsAdmin();
+    await user.click(within(rowFor('Dana Diaz')).getByRole('button', { name: 'Edit' }));
+
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('keeps Tab inside the dialog rather than letting it walk out the back', async () => {
+    const { user } = renderAsAdmin();
+    await user.click(within(rowFor('Dana Diaz')).getByRole('button', { name: 'Edit' }));
+
+    const dialog = screen.getByRole('dialog');
+    const close = within(dialog).getByRole('button', { name: 'Close' });
+    const save = within(dialog).getByRole('button', { name: 'Save changes' });
+
+    save.focus();
+    await user.tab();
+    expect(close).toHaveFocus();
+
+    await user.tab({ shift: true });
+    expect(save).toHaveFocus();
+  });
+
+  it('leaves what was typed alone while the dialog re-renders', async () => {
+    const { user } = renderAsAdmin();
+    await user.click(within(rowFor('Dana Diaz')).getByRole('button', { name: 'Edit' }));
+
+    const field = screen.getByLabelText('Display name');
+    await user.clear(field);
+    await user.type(field, 'Dana D.');
+
+    expect(field).toHaveFocus();
+    expect(field).toHaveValue('Dana D.');
+  });
+});
+
 describe('exporting accounts', () => {
   it('writes every account the filters match to a CSV', async () => {
     // jsdom implements neither object URLs nor navigation, so stand in for both and assert

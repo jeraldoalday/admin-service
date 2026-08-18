@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 
 export function Card({
   title,
@@ -109,6 +109,24 @@ export function Toolbar({ children }: { children: ReactNode }): ReactNode {
   return <div className="toolbar">{children}</div>;
 }
 
+const FOCUSABLE = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
+/**
+ * A dialog that behaves like one for someone not using a mouse.
+ *
+ * `aria-modal` tells a screen reader that the rest of the page is inert, but it does not make
+ * it so: without the handling below, Tab walked straight out of the dialog into the screen
+ * behind it, Escape did nothing, and closing left focus on the document body — so the reader
+ * had to find their way back to the row they had been editing. Focus enters on open, cycles
+ * inside while open, and returns to whatever opened the dialog when it closes.
+ */
 export function Modal({
   title,
   onClose,
@@ -118,9 +136,58 @@ export function Modal({
   onClose: () => void;
   children: ReactNode;
 }): ReactNode {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  // Callers pass an inline arrow, so the prop is a new function on every render. Reading it
+  // through a ref keeps the listener below mounted once instead of being torn down and
+  // re-attached — and re-stealing focus — each time the dialog re-renders.
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current;
+
+    // Focus the dialog itself rather than its first control: a screen reader then announces
+    // what just opened, and Tab walks the dialog from the top instead of dropping the reader
+    // into the middle of a form whose heading they never heard.
+    dialog?.focus();
+
+    function handleKeyDown(event: KeyboardEvent): void {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== 'Tab' || !dialogRef.current) return;
+
+      const focusable = [...dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)];
+      const edge = event.shiftKey ? focusable[0] : focusable[focusable.length - 1];
+      if (!edge || document.activeElement !== edge) return;
+
+      event.preventDefault();
+      (event.shiftKey ? focusable[focusable.length - 1] : focusable[0])?.focus();
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      opener?.focus?.();
+    };
+  }, []);
+
   return (
     <div className="modal__backdrop">
-      <div className="modal" role="dialog" aria-modal="true" aria-label={title}>
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        ref={dialogRef}
+        tabIndex={-1}
+      >
         <header className="modal__header">
           <h2>{title}</h2>
           <button type="button" className="button button--ghost" onClick={onClose}>
