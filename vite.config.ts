@@ -22,7 +22,9 @@ export default defineConfig({
       // The rules are the part worth holding a line under; the screens are covered through
       // the whole-app tests rather than by chasing a number.
       include: ['src/domain/**', 'src/app/**'],
-      thresholds: { statements: 90, branches: 85, functions: 90, lines: 90 },
+      // Set just under what the suite actually reaches, so a real regression trips them
+      // while an ordinary refactor does not.
+      thresholds: { statements: 95, branches: 90, functions: 95, lines: 95 },
     },
   },
 });
