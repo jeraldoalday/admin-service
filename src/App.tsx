@@ -4,6 +4,7 @@ import { useSession } from '@/app/sessionContext';
 import { Layout, PageHeader } from '@/components/Layout';
 import { Card } from '@/components/ui';
 import { AcceptInvitePage } from '@/pages/AcceptInvitePage';
+import { AccountPage } from '@/pages/AccountPage';
 import { AuditLogPage } from '@/pages/AuditLogPage';
 import { OverviewPage } from '@/pages/OverviewPage';
 import { SignInPage } from '@/pages/SignInPage';
@@ -51,6 +52,7 @@ export function App(): ReactNode {
         }
       >
         <Route index element={<OverviewPage />} />
+        <Route path="account" element={<AccountPage />} />
         <Route path="teams" element={<TeamsPage />} />
         <Route path="teams/:teamId" element={<TeamDetailPage />} />
         <Route path="invites/:token" element={<AcceptInvitePage />} />

@@ -12,6 +12,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { to: '/', label: 'Overview' },
   { to: '/teams', label: 'Teams' },
+  { to: '/account', label: 'Account' },
   { to: '/users', label: 'Users', adminOnly: true },
   { to: '/audit-logs', label: 'Audit log', adminOnly: true },
 ];
