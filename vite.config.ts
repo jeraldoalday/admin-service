@@ -16,5 +16,13 @@ export default defineConfig({
     setupFiles: ['./tests/setup.ts'],
     include: ['tests/**/*.test.{ts,tsx}'],
     restoreMocks: true,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      // The rules are the part worth holding a line under; the screens are covered through
+      // the whole-app tests rather than by chasing a number.
+      include: ['src/domain/**', 'src/app/**'],
+      thresholds: { statements: 90, branches: 85, functions: 90, lines: 90 },
+    },
   },
 });
