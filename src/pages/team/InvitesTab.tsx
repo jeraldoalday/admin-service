@@ -3,7 +3,14 @@ import { useActor } from '@/app/sessionContext';
 import { useLiveQuery } from '@/app/store';
 import { DataTable, Pagination } from '@/components/DataTable';
 import { Badge, EmptyState, ErrorNotice, Field, SuccessNotice, Toolbar } from '@/components/ui';
-import { INVITE_STATUSES, teams, toErrorMessage, type InviteStatus, type TeamRole } from '@/domain';
+import {
+  INVITE_STATUSES,
+  teams,
+  toErrorMessage,
+  type InviteStatus,
+  type TeamInviteView,
+  type TeamRole,
+} from '@/domain';
 import { formatDate, relativeExpiry } from '@/lib/format';
 
 const STATUS_TONES: Record<InviteStatus, 'positive' | 'neutral' | 'warning' | 'danger'> = {
@@ -20,7 +27,7 @@ export function InvitesTab({ teamId }: { teamId: string }): ReactNode {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<Exclude<TeamRole, 'OWNER'>>('MEMBER');
   const [error, setError] = useState<string | null>(null);
-  const [lastInviteLink, setLastInviteLink] = useState<string | null>(null);
+  const [revealedLink, setRevealedLink] = useState<{ email: string; url: string } | null>(null);
 
   const result = useLiveQuery(() =>
     teams.listInvites(actor, teamId, {
@@ -36,12 +43,26 @@ export function InvitesTab({ teamId }: { teamId: string }): ReactNode {
     try {
       const invite = teams.createInvite(actor, teamId, { email, role });
       setEmail('');
-      setLastInviteLink(`${window.location.origin}/invites/${invite.token}`);
+      revealLink(invite);
       setPage(1);
     } catch (caught) {
-      setLastInviteLink(null);
+      setRevealedLink(null);
       setError(toErrorMessage(caught));
     }
+  }
+
+  /**
+   * Surfaces the link for an invite. There is no mail transport here, so the link has to be
+   * retrievable for as long as the invite is pending - showing it only once at creation left
+   * no way to re-send one. Copying to the clipboard is best-effort; the link is rendered
+   * either way so it can always be selected by hand.
+   */
+  function revealLink(invite: TeamInviteView): void {
+    const url = `${window.location.origin}/invites/${invite.token}`;
+    setRevealedLink({ email: invite.email, url });
+    void navigator.clipboard?.writeText?.(url).catch(() => {
+      // Clipboard access is denied in plenty of contexts; the visible link is the fallback.
+    });
   }
 
   function revoke(inviteId: string): void {
@@ -80,10 +101,10 @@ export function InvitesTab({ teamId }: { teamId: string }): ReactNode {
       </form>
 
       <ErrorNotice error={error} />
-      {lastInviteLink && (
+      {revealedLink && (
         <SuccessNotice>
-          Invite created. There is no mail transport here, so share the link yourself:{' '}
-          <code className="secret">{lastInviteLink}</code>
+          Invite link for <strong>{revealedLink.email}</strong>. There is no mail transport here, so
+          share it yourself: <code className="secret">{revealedLink.url}</code>
         </SuccessNotice>
       )}
 
@@ -123,13 +144,22 @@ export function InvitesTab({ teamId }: { teamId: string }): ReactNode {
               <td className="cell--muted">{formatDate(invite.createdAt)}</td>
               <td className="cell--actions">
                 {invite.status === 'PENDING' && (
-                  <button
-                    type="button"
-                    className="button button--ghost"
-                    onClick={() => revoke(invite.id)}
-                  >
-                    Revoke
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className="button button--ghost"
+                      onClick={() => revealLink(invite)}
+                    >
+                      Copy link
+                    </button>
+                    <button
+                      type="button"
+                      className="button button--ghost"
+                      onClick={() => revoke(invite.id)}
+                    >
+                      Revoke
+                    </button>
+                  </>
                 )}
               </td>
             </tr>

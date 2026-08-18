@@ -110,7 +110,7 @@ describe('invites', () => {
     await user.click(screen.getByRole('button', { name: 'Send invite' }));
 
     const status = await screen.findByRole('status');
-    expect(status).toHaveTextContent('Invite created');
+    expect(status).toHaveTextContent('Invite link for newcomer@example.com');
 
     const invite = getDatabase().invites.find(
       (candidate) => candidate.email === 'newcomer@example.com',
@@ -128,6 +128,31 @@ describe('invites', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'There is already a pending invite for this email',
     );
+  });
+
+  it('shows the link again for an invite that is still pending', async () => {
+    const { user } = openTeam(adminActor().id);
+    await user.click(screen.getByRole('button', { name: 'Invites' }));
+
+    // Nothing was just created here: this is the seeded invite, and its link has to be
+    // retrievable so it can be re-sent.
+    await user.click(screen.getByRole('button', { name: 'Copy link' }));
+
+    const seeded = getDatabase().invites.find(
+      (candidate) => candidate.email === 'noor@example.com',
+    );
+    const notice = await screen.findByRole('status');
+    expect(notice).toHaveTextContent('noor@example.com');
+    expect(notice).toHaveTextContent(seeded?.token ?? 'missing token');
+  });
+
+  it('offers no link once an invite is no longer pending', async () => {
+    const { user } = openTeam(adminActor().id);
+    await user.click(screen.getByRole('button', { name: 'Invites' }));
+
+    await user.click(screen.getByRole('button', { name: 'Revoke' }));
+
+    expect(screen.queryByRole('button', { name: 'Copy link' })).not.toBeInTheDocument();
   });
 
   it('revokes a pending invite', async () => {
