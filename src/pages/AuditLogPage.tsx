@@ -27,16 +27,16 @@ export function AuditLogPage(): ReactNode {
 
   /**
    * Exports everything the current filters match, not just the page on screen - an export
-   * that silently stopped at fifteen rows would be worse than no export at all.
+   * that silently stopped at fifteen rows would be worse than no export at all. It reads
+   * through the unpaginated list for the same reason: a page caps out at a hundred rows.
    */
   function exportMatching(): void {
-    const matching = audit.listAuditLogs({
-      pageSize: 100,
+    const matching = audit.listAllAuditLogs({
       ...(action ? { action } : {}),
       ...(targetType ? { targetType } : {}),
     });
 
-    const csv = toCsv(matching.items, [
+    const csv = toCsv(matching, [
       { header: 'Timestamp', value: (entry) => entry.createdAt },
       { header: 'Action', value: (entry) => entry.action },
       { header: 'Actor', value: (entry) => entry.actorId },
@@ -46,7 +46,7 @@ export function AuditLogPage(): ReactNode {
     ]);
 
     downloadTextFile('audit-log.csv', csv, 'text/csv');
-    setExported(matching.items.length);
+    setExported(matching.length);
   }
 
   return (

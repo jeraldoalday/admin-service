@@ -1,7 +1,7 @@
 import { getDatabase, mutate } from './database';
 import { createId, nowIso } from './ids';
 import { paginate, sortNewestFirst, type PaginatedResult } from './pagination';
-import type { AuditLogView } from './types';
+import type { AuditLogRecord, AuditLogView } from './types';
 import { listAuditLogsQuerySchema, parseInput, type ListAuditLogsQuery } from './validation';
 
 export interface RecordAuditLogInput {
@@ -30,14 +30,32 @@ export function recordAuditLog(input: RecordAuditLogInput): void {
   });
 }
 
+interface AuditFilters {
+  action?: string | undefined;
+  targetType?: string | undefined;
+}
+
+function matchesFilters(log: AuditLogRecord, filters: AuditFilters): boolean {
+  if (filters.action && log.action !== filters.action) return false;
+  if (filters.targetType && log.targetType !== filters.targetType) return false;
+  return true;
+}
+
 export function listAuditLogs(rawQuery: ListAuditLogsQuery = {}): PaginatedResult<AuditLogView> {
   const query = parseInput(listAuditLogsQuerySchema, rawQuery);
-  const matching = getDatabase().auditLogs.filter(
-    (log) =>
-      (!query.action || log.action === query.action) &&
-      (!query.targetType || log.targetType === query.targetType),
-  );
+  const matching = getDatabase().auditLogs.filter((log) => matchesFilters(log, query));
   return paginate(sortNewestFirst(matching), query);
+}
+
+/**
+ * Every entry the filters match, in one array rather than a page of them.
+ *
+ * An export has to be built on this rather than on `listAuditLogs`: a page is capped at a
+ * hundred rows by the pagination schema, so an export that asked for one page stopped at a
+ * hundred entries while telling the reader it covered everything the filters matched.
+ */
+export function listAllAuditLogs(filters: AuditFilters = {}): AuditLogView[] {
+  return sortNewestFirst(getDatabase().auditLogs.filter((log) => matchesFilters(log, filters)));
 }
 
 /** Distinct action names present in the log, for populating the filter dropdown. */

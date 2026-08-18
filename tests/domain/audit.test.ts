@@ -42,6 +42,26 @@ describe('the audit log', () => {
     expect(page.totalPages).toBe(2);
   });
 
+  it('lists every matching entry unpaginated, past the page-size cap', () => {
+    // A page tops out at a hundred rows, which is exactly the trap an export falls into: it
+    // reports success while quietly leaving the rest of the matching entries behind.
+    for (let index = 0; index < 120; index += 1) {
+      audit.recordAuditLog({ actorId: null, action: 'bulk.tested', targetType: 'test' });
+    }
+
+    expect(audit.listAuditLogs({ action: 'bulk.tested', pageSize: 100 }).items).toHaveLength(100);
+    expect(audit.listAllAuditLogs({ action: 'bulk.tested' })).toHaveLength(120);
+  });
+
+  it('applies the same filters to the unpaginated read as to a page', () => {
+    const admin = adminActor();
+    teams.updateTeam(admin, teamIdBySlug('platform'), { name: 'Renamed' });
+
+    expect(audit.listAllAuditLogs({ targetType: 'team' })).toHaveLength(2);
+    expect(audit.listAllAuditLogs({ action: 'team.updated' })).toHaveLength(1);
+    expect(audit.listAllAuditLogs()).toHaveLength(audit.listAuditLogs({ pageSize: 100 }).total);
+  });
+
   it('offers the distinct actions and target types present, for filter menus', () => {
     expect(audit.listAuditActions()).toEqual([
       'api_key.created',
