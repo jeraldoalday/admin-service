@@ -38,6 +38,7 @@ data** in the sidebar puts it back to the seeded dataset and signs you out.
 | `npm run lint` / `lint:fix`       | ESLint (including the React Hooks rules)    |
 | `npm run format` / `format:check` | Prettier                                    |
 | `npm run typecheck`               | `tsc` with no emit                          |
+| `npm run check`                   | Lint, format, types, and the covered suite  |
 | `npm test`                        | Run the test suite once                     |
 | `npm run test:watch`              | Run the test suite in watch mode            |
 | `npm run test:coverage`           | Coverage report, with thresholds enforced   |
@@ -48,6 +49,7 @@ data** in the sidebar puts it back to the seeded dataset and signs you out.
 | ----------------- | -------------- | ---------------------------------------------------------------------- |
 | `/sign-in`        | public         | Sign in or register; the first account ever created becomes an admin   |
 | `/`               | signed in      | Overview — your teams, and for admins the platform totals and activity |
+| `/account`        | signed in      | Your own display name and password                                     |
 | `/teams`          | signed in      | Teams you belong to, and the form that creates one                     |
 | `/teams/:teamId`  | member         | One team: members, invites, API keys, and settings                     |
 | `/invites/:token` | signed in      | Accept an invite addressed to your account's email                     |
@@ -69,7 +71,12 @@ what makes a denial as easy to test as a success.
 is unknown or the password is wrong, so the form cannot be used to enumerate accounts.
 Deactivated accounts cannot sign in, and an existing session pointing at one is dropped on the
 spot rather than at some later expiry. Admins cannot change their own role, deactivate
-themselves, or delete their own account.
+themselves, or delete their own account. An account manages its own name and password from
+`/account`: changing a password requires proving the current one, so a session left open on a
+shared machine is not by itself enough to lock its owner out, and the role and active flag
+stay where they belong — on the admin screens, as somebody else's decision. Deleting an
+account hands over any team it was the sole owner of before it goes, since the rules that
+protect a last owner would otherwise leave that team unreachable.
 
 **Teams** are a self-service multi-tenancy layer, independent of the platform `role`: any
 signed-in user can create a team and becomes its `OWNER`. Team roles (`OWNER`/`ADMIN`/`MEMBER`)
@@ -77,8 +84,10 @@ only mean something inside that team. A team always needs at least one owner —
 cannot be demoted, removed, or leave. Invites are single-use tokens tied to an email address,
 expire after seven days, and can only be accepted while signed in as the address they name.
 There is no mail transport, so a pending invite's link stays retrievable from the invites tab
-for as long as it is valid; accepted and revoked invites offer none, because their links are
-dead.
+for as long as it is valid; accepted, revoked, and expired invites offer none, because their
+links are dead. An invite's status is derived as it is read rather than taken from the row, so
+one that ages out reads as expired everywhere immediately instead of waiting to be presented;
+a sweep at boot then brings the stored rows back in line with what the screens already show.
 
 **Permissions** add resource-scoped access within a team, independent of the coarse team role.
 There are five: `MANAGE_TEAM`, `MANAGE_MEMBERS`, `MANAGE_INVITES`, `MANAGE_PERMISSIONS`, and
@@ -97,10 +106,15 @@ machine-facing read, so those guarantees are visible rather than merely document
 
 **The audit log** is append-only, written by the domain layer rather than by the screens, which
 is what makes it a complete record instead of a sample. Every user, team, membership, invite,
-permission, and API key mutation lands in it. It exports to CSV — everything the current
-filters match, not just the page on screen — with fields quoted per RFC 4180 and values that
-begin with `=`, `+`, `-`, or `@` prefixed, so a spreadsheet reads a user-chosen display name
-as text rather than as a formula.
+permission, and API key mutation lands in it. It filters by action, by target type, and by
+date range, where a bare calendar date names the whole day it stands for rather than the
+instant it begins.
+
+**Exports** cover everything the current filters match, from the audit log and from the
+account list alike — not the page on screen, and not the first hundred rows either, since
+both read through an unpaginated query that shares its filters with the paged one. Fields are
+quoted per RFC 4180, and values that begin with `=`, `+`, `-`, or `@` are prefixed, so a
+spreadsheet reads a user-chosen display name as text rather than as a formula.
 
 Failures use the same error types the rules always had — `BadRequestError`, `Unauthorized`,
 `Forbidden`, `NotFound`, `Conflict` — and screens render them in place instead of unmounting.
@@ -120,6 +134,7 @@ src/
     store.ts             Subscribes screens to the store's revision counter
   components/            Layout, table, and form primitives
   pages/                 One module per screen; team/ holds the team tabs
+    AccountPage.tsx      Self-service name and password
   lib/
     format.ts            Date and permission formatting
     csv.ts               RFC 4180 serialisation for exports
@@ -150,8 +165,10 @@ drive it the way a person would; nothing is mocked. The SHA-256 implementation i
 against `node:crypto` directly, since API key lookup depends on the two agreeing.
 
 `npm run test:coverage` reports on the domain and app layers and fails below its thresholds —
-currently around 96% of statements and 90% of branches. The screens are covered through the
-whole-app tests rather than by chasing a number.
+currently around 97% of statements and 91% of branches, with the thresholds set just under
+that so a real regression trips them and an ordinary refactor does not. `npm run check` runs
+lint, formatting, types, and that covered suite in one pass, which is exactly what CI runs.
+The screens are covered through the whole-app tests rather than by chasing a number.
 
 ## Status
 
