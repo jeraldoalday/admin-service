@@ -5,6 +5,7 @@
  */
 export * from './types';
 export type {
+  ChangePasswordInput,
   CreateApiKeyInput,
   CreateInviteInput,
   CreateTeamInput,
@@ -15,6 +16,7 @@ export type {
   LoginInput,
   RegisterInput,
   SetMemberPermissionsInput,
+  UpdateProfileInput,
   UpdateTeamInput,
   UpdateUserInput,
 } from './validation';

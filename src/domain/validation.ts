@@ -40,6 +40,33 @@ export const loginSchema = z.object({
 });
 export type LoginInput = z.infer<typeof loginSchema>;
 
+/**
+ * Self-service profile and password changes. These are the only writes an account can make
+ * to itself, and they are deliberately separate from the admin-facing `updateUserSchema`:
+ * that one can change a role and an active flag, which is exactly what somebody editing
+ * their own account must not be able to do.
+ */
+export const updateProfileSchema = z.object({
+  displayName: z.string().trim().min(1, 'Display name is required').max(120),
+});
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, 'Your current password is required'),
+    newPassword: z.string().min(8, 'Password must be at least 8 characters'),
+    confirmPassword: z.string().min(1, 'Confirm your new password'),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    path: ['confirmPassword'],
+    message: 'The new passwords do not match',
+  })
+  .refine((data) => data.newPassword !== data.currentPassword, {
+    path: ['newPassword'],
+    message: 'The new password must be different from the current one',
+  });
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+
 // -- users -----------------------------------------------------------------
 
 export const listUsersQuerySchema = paginationSchema.extend({

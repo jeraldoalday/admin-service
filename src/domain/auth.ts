@@ -1,14 +1,20 @@
+import { recordAuditLog } from './audit';
 import { getDatabase, mutate } from './database';
 import { ConflictError, UnauthorizedError } from './errors';
+import { requireActor, type Actor } from './guards';
 import { createId, nowIso } from './ids';
 import { hashPassword, verifyPassword } from './password';
 import type { PublicUser, UserRecord } from './types';
 import {
+  changePasswordSchema,
   loginSchema,
   parseInput,
   registerSchema,
+  updateProfileSchema,
+  type ChangePasswordInput,
   type LoginInput,
   type RegisterInput,
+  type UpdateProfileInput,
 } from './validation';
 
 export function toPublicUser(user: UserRecord): PublicUser {
@@ -68,6 +74,71 @@ export function loginUser(input: LoginInput): PublicUser {
   }
 
   return toPublicUser(user);
+}
+
+/**
+ * Resolves the account behind a session for a write it is making to itself. A session
+ * pointing at an account that has since been deleted or deactivated is refused here rather
+ * than allowed to write through a stale identity.
+ */
+function requireOwnAccount(actor: Actor): UserRecord {
+  const current = requireActor(actor);
+  const user = findUserById(current.id);
+  if (!user || !user.isActive) {
+    throw new UnauthorizedError('This session is no longer valid');
+  }
+  return user;
+}
+
+/** Renames your own account. Role and active status stay admin-only, deliberately. */
+export function updateProfile(actor: Actor, rawInput: UpdateProfileInput): PublicUser {
+  const user = requireOwnAccount(actor);
+  const input = parseInput(updateProfileSchema, rawInput);
+
+  const updated = mutate(() => {
+    user.displayName = input.displayName;
+    user.updatedAt = nowIso();
+    return toPublicUser(user);
+  });
+
+  recordAuditLog({
+    actorId: user.id,
+    action: 'user.profile_updated',
+    targetType: 'user',
+    targetId: user.id,
+    metadata: { displayName: input.displayName },
+  });
+
+  return updated;
+}
+
+/**
+ * Changes your own password, which requires proving you know the current one — a session
+ * left open on a shared machine should not be enough to lock its owner out of the account.
+ * The audit entry records that it happened and nothing about either password.
+ */
+export function changePassword(actor: Actor, rawInput: ChangePasswordInput): PublicUser {
+  const user = requireOwnAccount(actor);
+  const input = parseInput(changePasswordSchema, rawInput);
+
+  if (!verifyPassword(input.currentPassword, user.passwordHash)) {
+    throw new UnauthorizedError('Your current password is incorrect');
+  }
+
+  const updated = mutate(() => {
+    user.passwordHash = hashPassword(input.newPassword);
+    user.updatedAt = nowIso();
+    return toPublicUser(user);
+  });
+
+  recordAuditLog({
+    actorId: user.id,
+    action: 'user.password_changed',
+    targetType: 'user',
+    targetId: user.id,
+  });
+
+  return updated;
 }
 
 /**
