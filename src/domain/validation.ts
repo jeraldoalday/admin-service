@@ -69,11 +69,17 @@ export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 
 // -- users -----------------------------------------------------------------
 
-export const listUsersQuerySchema = paginationSchema.extend({
+const userFilterFields = {
   role: userRoleEnum.optional(),
   isActive: z.boolean().optional(),
   search: z.string().trim().min(1).max(200).optional(),
-});
+};
+
+/** The filter set on its own, for reads that want every match rather than a page of them. */
+export const userFiltersSchema = z.object(userFilterFields);
+export type UserFilters = z.input<typeof userFiltersSchema>;
+
+export const listUsersQuerySchema = paginationSchema.extend(userFilterFields);
 export type ListUsersQuery = z.input<typeof listUsersQuerySchema>;
 
 export const updateUserSchema = z

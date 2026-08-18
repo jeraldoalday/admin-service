@@ -3,14 +3,25 @@ import { useActor } from '@/app/sessionContext';
 import { useLiveQuery } from '@/app/store';
 import { DataTable, Pagination } from '@/components/DataTable';
 import { PageHeader } from '@/components/Layout';
-import { Badge, Card, EmptyState, ErrorNotice, Field, Modal, Toolbar } from '@/components/ui';
+import {
+  Badge,
+  Card,
+  EmptyState,
+  ErrorNotice,
+  Field,
+  Modal,
+  SuccessNotice,
+  Toolbar,
+} from '@/components/ui';
 import {
   toErrorMessage,
   users,
   type AdminUserView,
   type UpdateUserInput,
+  type UserFilters,
   type UserRole,
 } from '@/domain';
+import { downloadTextFile, toCsv } from '@/lib/csv';
 import { formatDate } from '@/lib/format';
 
 type ActiveFilter = 'all' | 'true' | 'false';
@@ -25,21 +36,48 @@ export function UsersPage(): ReactNode {
   const [editing, setEditing] = useState<AdminUserView | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [exported, setExported] = useState<number | null>(null);
 
-  const result = useLiveQuery(() =>
-    users.listUsers(actor, {
-      page,
-      pageSize: 10,
-      ...(search.trim() ? { search: search.trim() } : {}),
-      ...(role === 'all' ? {} : { role }),
-      ...(isActive === 'all' ? {} : { isActive: isActive === 'true' }),
-    }),
-  );
+  const filters: UserFilters = {
+    ...(search.trim() ? { search: search.trim() } : {}),
+    ...(role === 'all' ? {} : { role }),
+    ...(isActive === 'all' ? {} : { isActive: isActive === 'true' }),
+  };
+
+  const result = useLiveQuery(() => users.listUsers(actor, { ...filters, page, pageSize: 10 }));
 
   function changeFilter(apply: () => void): void {
     apply();
     setPage(1);
     setError(null);
+    setExported(null);
+  }
+
+  /**
+   * Exports every account the filters match rather than the ten on screen. The file carries
+   * the same projection the table does — no password material passes through the domain's
+   * admin view, so there is none here to leak into a spreadsheet.
+   */
+  function exportMatching(): void {
+    setError(null);
+    try {
+      const matching = users.listAllUsers(actor, filters);
+
+      const csv = toCsv(matching, [
+        { header: 'Name', value: (row) => row.displayName },
+        { header: 'Email', value: (row) => row.email },
+        { header: 'Role', value: (row) => row.role },
+        { header: 'Status', value: (row) => (row.isActive ? 'Active' : 'Deactivated') },
+        { header: 'Joined', value: (row) => row.createdAt },
+        { header: 'Updated', value: (row) => row.updatedAt },
+      ]);
+
+      downloadTextFile('users.csv', csv, 'text/csv');
+      setExported(matching.length);
+    } catch (caught) {
+      setExported(null);
+      setError(toErrorMessage(caught));
+    }
   }
 
   function handleDelete(id: string): void {
@@ -57,6 +95,11 @@ export function UsersPage(): ReactNode {
       <PageHeader
         title="Users"
         description="Every account on the platform. Updates and deletions are written to the audit log."
+        actions={
+          <button type="button" className="button" onClick={exportMatching}>
+            Export CSV
+          </button>
+        }
       />
 
       <Card>
@@ -96,6 +139,12 @@ export function UsersPage(): ReactNode {
         </Toolbar>
 
         <ErrorNotice error={error} />
+
+        {exported !== null && (
+          <SuccessNotice>
+            Exported {exported} {exported === 1 ? 'account' : 'accounts'} to users.csv.
+          </SuccessNotice>
+        )}
 
         {result.items.length === 0 ? (
           <EmptyState>No accounts match these filters.</EmptyState>

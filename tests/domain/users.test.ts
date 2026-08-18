@@ -36,6 +36,38 @@ describe('listing users', () => {
   });
 });
 
+describe('listing every matching user', () => {
+  it('is refused for non-admins', () => {
+    expect(() => users.listAllUsers(danaActor())).toThrow(
+      'You do not have permission to perform this action',
+    );
+  });
+
+  it('returns every match rather than a page of them', () => {
+    const admin = adminActor();
+    for (let index = 0; index < 25; index += 1) {
+      createUser(`bulk${index}@example.com`, `Bulk ${index}`);
+    }
+
+    expect(users.listUsers(admin, { pageSize: 10 }).items).toHaveLength(10);
+    expect(users.listAllUsers(admin)).toHaveLength(30);
+  });
+
+  it('applies the same filters as the paged read', () => {
+    const admin = adminActor();
+
+    expect(users.listAllUsers(admin, { role: 'ADMIN' })).toHaveLength(1);
+    expect(users.listAllUsers(admin, { isActive: false })).toHaveLength(1);
+    expect(users.listAllUsers(admin, { search: 'okafor' }).map((user) => user.email)).toEqual([
+      'mira@example.com',
+    ]);
+  });
+
+  it('carries no password material', () => {
+    expect(JSON.stringify(users.listAllUsers(adminActor()))).not.toContain('passwordHash');
+  });
+});
+
 describe('updating a user', () => {
   it('applies the change and writes an audit entry', () => {
     const admin = adminActor();

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import { audit, getDatabase, users } from '@/domain';
 import { adminActor } from '../helpers';
@@ -134,5 +134,51 @@ describe('the users screen', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Admins cannot delete their own account',
     );
+  });
+});
+
+describe('exporting accounts', () => {
+  it('writes every account the filters match to a CSV', async () => {
+    // jsdom implements neither object URLs nor navigation, so stand in for both and assert
+    // on the document that would have been handed to the reader.
+    const documents: string[] = [];
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: (blob: Blob) => {
+        void blob.text().then((text) => documents.push(text));
+        return 'blob:users';
+      },
+      revokeObjectURL: () => undefined,
+    });
+    const clicks = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => undefined);
+
+    const { user } = renderAsAdmin();
+    await user.selectOptions(screen.getByLabelText('Status'), 'false');
+    await user.click(screen.getByRole('button', { name: 'Export CSV' }));
+
+    expect(clicks).toHaveBeenCalledOnce();
+    expect(await screen.findByRole('status')).toHaveTextContent('Exported 1 account');
+    await vi.waitFor(() => expect(documents[0]).toContain('Sam Lee'));
+    expect(documents[0]).toContain('Name,Email,Role,Status,Joined,Updated');
+    expect(documents[0]).not.toContain('Avery Admin');
+  });
+
+  it('clears the export notice as soon as the filters move on', async () => {
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: () => 'blob:users',
+      revokeObjectURL: () => undefined,
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+
+    const { user } = renderAsAdmin();
+    await user.click(screen.getByRole('button', { name: 'Export CSV' }));
+    expect(await screen.findByRole('status')).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText('Role'), 'ADMIN');
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 });

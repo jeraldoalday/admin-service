@@ -20,6 +20,7 @@ export type {
   UpdateProfileInput,
   UpdateTeamInput,
   UpdateUserInput,
+  UserFilters,
 } from './validation';
 export * from './errors';
 export * from './pagination';

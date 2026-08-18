@@ -10,13 +10,36 @@ import {
   listUsersQuerySchema,
   parseInput,
   updateUserSchema,
+  userFiltersSchema,
   type ListUsersQuery,
   type UpdateUserInput,
+  type UserFilters,
 } from './validation';
 
 function toAdminUserView(user: UserRecord): AdminUserView {
   const { id, email, displayName, role, isActive, createdAt, updatedAt } = user;
   return { id, email, displayName, role, isActive, createdAt, updatedAt };
+}
+
+interface ParsedFilters {
+  role?: 'ADMIN' | 'MEMBER' | undefined;
+  isActive?: boolean | undefined;
+  search?: string | undefined;
+}
+
+function matchesFilters(user: UserRecord, filters: ParsedFilters): boolean {
+  if (filters.role && user.role !== filters.role) return false;
+  if (filters.isActive !== undefined && user.isActive !== filters.isActive) return false;
+
+  const search = filters.search?.toLowerCase();
+  if (
+    search &&
+    !user.email.toLowerCase().includes(search) &&
+    !user.displayName.toLowerCase().includes(search)
+  ) {
+    return false;
+  }
+  return true;
 }
 
 export function listUsers(
@@ -25,22 +48,22 @@ export function listUsers(
 ): PaginatedResult<AdminUserView> {
   requireAdmin(actor);
   const query = parseInput(listUsersQuerySchema, rawQuery);
-  const search = query.search?.toLowerCase();
-
-  const matching = getDatabase().users.filter((user) => {
-    if (query.role && user.role !== query.role) return false;
-    if (query.isActive !== undefined && user.isActive !== query.isActive) return false;
-    if (
-      search &&
-      !user.email.toLowerCase().includes(search) &&
-      !user.displayName.toLowerCase().includes(search)
-    ) {
-      return false;
-    }
-    return true;
-  });
+  const matching = getDatabase().users.filter((user) => matchesFilters(user, query));
 
   return paginate(sortNewestFirst(matching).map(toAdminUserView), query);
+}
+
+/**
+ * Every account the filters match, in one array rather than a page of them — what an export
+ * needs. It shares the filters with the paged read, so the file and the screen can never
+ * disagree about which accounts are in scope.
+ */
+export function listAllUsers(actor: Actor, rawFilters: UserFilters = {}): AdminUserView[] {
+  requireAdmin(actor);
+  const filters = parseInput(userFiltersSchema, rawFilters);
+  const matching = getDatabase().users.filter((user) => matchesFilters(user, filters));
+
+  return sortNewestFirst(matching).map(toAdminUserView);
 }
 
 function getUserRecordOrThrow(id: string): UserRecord {
