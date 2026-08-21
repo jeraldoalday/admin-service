@@ -13,6 +13,13 @@ describe('the overview', () => {
     expect(screen.getByRole('heading', { name: 'Recent activity' })).toBeInTheDocument();
   });
 
+  it('says who performed each recent entry, not just what happened', () => {
+    renderApp({ userId: adminActor().id });
+
+    const activity = screen.getByRole('heading', { name: 'Recent activity' }).closest('section');
+    expect(within(activity as HTMLElement).getAllByText(/Avery Admin/).length).toBeGreaterThan(0);
+  });
+
   it('leaves the platform-wide figures out for a member', () => {
     renderApp({ userId: danaActor().id });
 

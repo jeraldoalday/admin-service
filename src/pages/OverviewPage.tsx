@@ -29,6 +29,11 @@ export function OverviewPage(): ReactNode {
   const recentActivity = useLiveQuery(() =>
     isAdmin ? audit.listAuditLogs({ pageSize: 6 }).items : [],
   );
+  // Resolved from the accounts table as the list is read, the same way the audit screen does
+  // it: the entry itself keeps the id, so renaming an account never rewrites its history.
+  const actorLabels = useLiveQuery(
+    () => new Map(isAdmin ? audit.listAuditActors().map((row) => [row.id, row.label]) : []),
+  );
 
   return (
     <>
@@ -85,7 +90,10 @@ export function OverviewPage(): ReactNode {
                   <span className="list__primary">
                     <code>{entry.action}</code>
                   </span>
-                  <span className="list__meta">{formatDateTime(entry.createdAt)}</span>
+                  <span className="list__meta">
+                    {entry.actorId ? (actorLabels.get(entry.actorId) ?? entry.actorId) : 'system'} ·{' '}
+                    {formatDateTime(entry.createdAt)}
+                  </span>
                 </li>
               ))}
             </ul>
