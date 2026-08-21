@@ -11,11 +11,12 @@ import {
   type TeamPermission,
 } from '@/domain';
 import { formatDate } from '@/lib/format';
+import { ActivityTab } from './ActivityTab';
 import { ApiKeysTab } from './ApiKeysTab';
 import { InvitesTab } from './InvitesTab';
 import { MembersTab, OwnPermissionsSummary } from './MembersTab';
 
-const TABS = ['Members', 'Invites', 'API keys', 'Settings'] as const;
+const TABS = ['Members', 'Invites', 'API keys', 'Activity', 'Settings'] as const;
 type Tab = (typeof TABS)[number];
 
 /**
@@ -57,6 +58,7 @@ export function TeamDetailPage(): ReactNode {
   const visibleTabs = TABS.filter((candidate) => {
     if (candidate === 'Invites') return can('MANAGE_INVITES');
     if (candidate === 'API keys') return can('MANAGE_API_KEYS');
+    if (candidate === 'Activity') return can('MANAGE_TEAM');
     return true;
   });
   const activeTab = visibleTabs.includes(tab) ? tab : 'Members';
@@ -99,6 +101,7 @@ export function TeamDetailPage(): ReactNode {
         )}
         {activeTab === 'Invites' && <InvitesTab teamId={teamId} />}
         {activeTab === 'API keys' && <ApiKeysTab teamId={teamId} />}
+        {activeTab === 'Activity' && <ActivityTab teamId={teamId} />}
         {activeTab === 'Settings' && (
           <TeamSettings
             teamId={teamId}
