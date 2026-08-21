@@ -182,7 +182,7 @@ drive it the way a person would; nothing is mocked. The SHA-256 implementation i
 against `node:crypto` directly, since API key lookup depends on the two agreeing.
 
 `npm run test:coverage` reports on the domain and app layers and fails below its thresholds —
-currently around 97% of statements and 92% of branches, with the thresholds set just under
+currently around 97.5% of statements and 91.7% of branches, with the thresholds set just under
 that so a real regression trips them and an ordinary refactor does not. `npm run check` runs
 lint, formatting, types, and that covered suite in one pass, which is exactly what CI runs.
 The screens are covered through the whole-app tests rather than by chasing a number.

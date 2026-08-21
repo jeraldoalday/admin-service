@@ -24,7 +24,7 @@ export default defineConfig({
       include: ['src/domain/**', 'src/app/**'],
       // Set just under what the suite actually reaches, so a real regression trips them
       // while an ordinary refactor does not.
-      thresholds: { statements: 95, branches: 90, functions: 95, lines: 95 },
+      thresholds: { statements: 96, branches: 91, functions: 97, lines: 96 },
     },
   },
 });
