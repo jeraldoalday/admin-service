@@ -20,7 +20,19 @@ import {
   type ApiKeyStatus,
   type TeamPermission,
 } from '@/domain';
-import { formatDate, formatDateTime, humanizePermission, relativeExpiry } from '@/lib/format';
+import {
+  expiryUrgency,
+  formatDate,
+  formatDateTime,
+  humanizePermission,
+  relativeExpiry,
+} from '@/lib/format';
+
+const STATUS_TONES = {
+  ACTIVE: 'positive',
+  EXPIRED: 'warning',
+  REVOKED: 'danger',
+} as const satisfies Record<ApiKeyStatus, 'positive' | 'warning' | 'danger'>;
 
 export function ApiKeysTab({ teamId }: { teamId: string }): ReactNode {
   const actor = useActor();
@@ -38,6 +50,12 @@ export function ApiKeysTab({ teamId }: { teamId: string }): ReactNode {
       pageSize: 10,
       ...(status === 'all' ? {} : { status }),
     }),
+  );
+
+  // Only live keys are worth warning about: a revoked or already-expired key has nothing
+  // left to lose by the date passing.
+  const expiringSoon = result.items.filter(
+    (key) => key.status === 'ACTIVE' && expiryUrgency(key.expiresAt) === 'soon',
   );
 
   function toggleScope(permission: TeamPermission, checked: boolean): void {
@@ -160,6 +178,15 @@ export function ApiKeysTab({ teamId }: { teamId: string }): ReactNode {
         </Field>
       </Toolbar>
 
+      {expiringSoon.length > 0 && (
+        <p className="notice notice--warning" role="status">
+          {expiringSoon.length === 1
+            ? `Key "${expiringSoon[0]?.name}" expires ${relativeExpiry(expiringSoon[0]?.expiresAt ?? null)}.`
+            : `${expiringSoon.length} keys on this page expire within the next week.`}{' '}
+          Rotate before the expiry to hand the caller a new secret without a gap.
+        </p>
+      )}
+
       {result.items.length === 0 ? (
         <EmptyState>This team has no API keys.</EmptyState>
       ) : (
@@ -176,9 +203,15 @@ export function ApiKeysTab({ teamId }: { teamId: string }): ReactNode {
                   : key.permissions.map(humanizePermission).join(', ')}
               </td>
               <td>
-                <Badge tone={key.status === 'ACTIVE' ? 'positive' : 'danger'}>{key.status}</Badge>
+                <Badge tone={STATUS_TONES[key.status]}>{key.status}</Badge>
               </td>
-              <td className="cell--muted">
+              <td
+                className={
+                  expiryUrgency(key.expiresAt) === 'soon' && key.status === 'ACTIVE'
+                    ? 'cell--warning'
+                    : 'cell--muted'
+                }
+              >
                 {key.expiresAt
                   ? `${formatDate(key.expiresAt)} (${relativeExpiry(key.expiresAt)})`
                   : 'never'}

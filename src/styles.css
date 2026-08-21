@@ -377,6 +377,13 @@ a {
   color: var(--text-muted);
 }
 
+/* An upcoming expiry is not an error, so it borrows the warning colour rather than the
+   danger one — the row is still working, it just will not be for much longer. */
+.cell--warning {
+  color: var(--warning-text);
+  font-weight: 500;
+}
+
 .cell--actions {
   display: flex;
   gap: 0.35rem;
@@ -594,6 +601,11 @@ select:focus-visible,
 .notice--success {
   background: var(--positive-bg);
   color: var(--positive-text);
+}
+
+.notice--warning {
+  background: var(--warning-bg);
+  color: var(--warning-text);
 }
 
 .empty-state {
