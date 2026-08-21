@@ -12,6 +12,8 @@ export function AuditLogPage(): ReactNode {
   const [page, setPage] = useState(1);
   const [action, setAction] = useState('');
   const [targetType, setTargetType] = useState('');
+  const [actorId, setActorId] = useState('');
+  const [search, setSearch] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [exported, setExported] = useState<number | null>(null);
@@ -20,6 +22,8 @@ export function AuditLogPage(): ReactNode {
   const filters: AuditLogFilters = {
     ...(action ? { action } : {}),
     ...(targetType ? { targetType } : {}),
+    ...(actorId ? { actorId } : {}),
+    ...(search.trim() ? { search: search.trim() } : {}),
     ...(from ? { from } : {}),
     ...(to ? { to } : {}),
   };
@@ -30,6 +34,8 @@ export function AuditLogPage(): ReactNode {
   const result = useLiveResult(() => audit.listAuditLogs({ ...filters, page, pageSize: 15 }));
   const actions = useLiveQuery(() => audit.listAuditActions());
   const targetTypes = useLiveQuery(() => audit.listAuditTargetTypes());
+  const actors = useLiveQuery(() => audit.listAuditActors());
+  const actorLabels = new Map(actors.map((candidate) => [candidate.id, candidate.label]));
 
   function changeFilter(apply: () => void): void {
     apply();
@@ -42,6 +48,8 @@ export function AuditLogPage(): ReactNode {
     changeFilter(() => {
       setAction('');
       setTargetType('');
+      setActorId('');
+      setSearch('');
       setFrom('');
       setTo('');
     });
@@ -60,7 +68,12 @@ export function AuditLogPage(): ReactNode {
       const csv = toCsv(matching, [
         { header: 'Timestamp', value: (entry) => entry.createdAt },
         { header: 'Action', value: (entry) => entry.action },
-        { header: 'Actor', value: (entry) => entry.actorId },
+        {
+          header: 'Actor',
+          value: (entry) =>
+            entry.actorId ? (actorLabels.get(entry.actorId) ?? entry.actorId) : '',
+        },
+        { header: 'Actor ID', value: (entry) => entry.actorId },
         { header: 'Target type', value: (entry) => entry.targetType },
         { header: 'Target', value: (entry) => entry.targetId },
         { header: 'Details', value: (entry) => entry.metadata },
@@ -114,6 +127,27 @@ export function AuditLogPage(): ReactNode {
               ))}
             </select>
           </Field>
+          <Field label="Actor">
+            <select
+              value={actorId}
+              onChange={(event) => changeFilter(() => setActorId(event.target.value))}
+            >
+              <option value="">Anyone</option>
+              {actors.map((candidate) => (
+                <option key={candidate.id} value={candidate.id}>
+                  {candidate.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Search" hint="Matches the action, the target, and the details.">
+            <input
+              type="search"
+              value={search}
+              placeholder="e.g. an email address"
+              onChange={(event) => changeFilter(() => setSearch(event.target.value))}
+            />
+          </Field>
           <Field label="From">
             <input
               type="date"
@@ -147,12 +181,15 @@ export function AuditLogPage(): ReactNode {
           <EmptyState>No entries match these filters.</EmptyState>
         ) : (
           <>
-            <DataTable columns={['When', 'Action', 'Target', 'Details']}>
+            <DataTable columns={['When', 'Action', 'Actor', 'Target', 'Details']}>
               {result.data.items.map((entry) => (
                 <tr key={entry.id}>
                   <td className="cell--muted">{formatDateTime(entry.createdAt)}</td>
                   <td>
                     <code>{entry.action}</code>
+                  </td>
+                  <td className="cell--muted">
+                    {entry.actorId ? (actorLabels.get(entry.actorId) ?? entry.actorId) : 'system'}
                   </td>
                   <td className="cell--muted">
                     {entry.targetType}
