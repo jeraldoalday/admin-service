@@ -61,6 +61,50 @@ describe('the audit log screen', () => {
     expect(table.getByText('{"displayName":"Dana D."}')).toBeInTheDocument();
   });
 
+  it('names who performed each entry rather than showing an opaque id', () => {
+    renderApp({ route: '/audit-logs', userId: adminActor().id });
+
+    const table = within(screen.getByRole('table'));
+    expect(table.getAllByText('Avery Admin (admin@example.com)')).toHaveLength(4);
+    expect(table.queryByText(adminActor().id)).not.toBeInTheDocument();
+  });
+
+  it('narrows the log to one actor', async () => {
+    const dana = danaActor();
+    teams.updateTeam(dana, teamIdBySlug('growth'), { name: 'Growth Core' });
+
+    const { user } = renderApp({ route: '/audit-logs', userId: adminActor().id });
+    await user.selectOptions(screen.getByLabelText('Actor'), dana.id);
+
+    const table = within(screen.getByRole('table'));
+    expect(table.getAllByRole('row')).toHaveLength(2);
+    expect(table.getByText('Dana Diaz (dana@example.com)')).toBeInTheDocument();
+  });
+
+  it('searches the details, where the interesting part of an entry lives', async () => {
+    const admin = adminActor();
+    teams.createInvite(admin, teamIdBySlug('platform'), { email: 'searchable@example.com' });
+
+    const { user } = renderApp({ route: '/audit-logs', userId: admin.id });
+    await user.type(screen.getByLabelText('Search'), 'searchable@example.com');
+
+    const table = within(screen.getByRole('table'));
+    expect(table.getAllByRole('row')).toHaveLength(2);
+    expect(table.getByText('team.invite.created')).toBeInTheDocument();
+  });
+
+  it('puts the search and the actor back with the other filters when cleared', async () => {
+    const { user } = renderApp({ route: '/audit-logs', userId: adminActor().id });
+
+    await user.type(screen.getByLabelText('Search'), 'nothing-matches-this');
+    expect(await screen.findByText('No entries match these filters.')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Clear filters' }));
+
+    expect(screen.getByLabelText('Search')).toHaveValue('');
+    expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(5);
+  });
+
   it('exports everything the filters match, not just the visible page', async () => {
     const admin = adminActor();
     users.updateUser(admin, danaActor().id, { displayName: 'Dana D.' });
