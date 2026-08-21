@@ -1,4 +1,5 @@
 import { getDatabase, mutate } from './database';
+import { requireTeamPermission, type Actor } from './guards';
 import { createId, nowIso } from './ids';
 import { paginate, sortNewestFirst, type PaginatedResult } from './pagination';
 import type { AuditLogRecord, AuditLogView } from './types';
@@ -45,6 +46,7 @@ interface ParsedFilters {
   action?: string | undefined;
   targetType?: string | undefined;
   actorId?: string | undefined;
+  teamId?: string | undefined;
   search?: string | undefined;
   from?: string | undefined;
   to?: string | undefined;
@@ -72,6 +74,7 @@ function matchesFilters(log: AuditLogRecord, filters: ParsedFilters): boolean {
   if (filters.action && log.action !== filters.action) return false;
   if (filters.targetType && log.targetType !== filters.targetType) return false;
   if (filters.actorId && log.actorId !== filters.actorId) return false;
+  if (filters.teamId && log.teamId !== filters.teamId) return false;
 
   const search = filters.search?.toLowerCase();
   if (search && !searchableText(log).includes(search)) return false;
@@ -109,10 +112,71 @@ export function listAuditTargetTypes(): string[] {
   return [...new Set(getDatabase().auditLogs.map((log) => log.targetType))].sort();
 }
 
+/**
+ * One team's slice of the log, for the people who run that team.
+ *
+ * The platform audit screen stays admin-only, and rightly so — it spans every account and
+ * every team. But a team owner asking who revoked their deploy key should not have to ask a
+ * platform admin, and the entries that answer that question are already scoped to their team.
+ * MANAGE_TEAM is the gate, which is the same permission that already covers renaming the
+ * team and is grantable to a member who runs one without being its owner.
+ *
+ * The team filter is applied after the caller's filters rather than merged with them, so a
+ * caller passing a different team id narrows their own team's slice to nothing instead of
+ * reading somebody else's.
+ */
+export function listTeamActivity(
+  actor: Actor,
+  teamId: string,
+  rawQuery: ListAuditLogsQuery = {},
+): PaginatedResult<AuditLogView> {
+  requireTeamPermission(actor, teamId, 'MANAGE_TEAM');
+  const query = parseInput(listAuditLogsQuerySchema, rawQuery);
+  const matching = getDatabase().auditLogs.filter(
+    (log) => log.teamId === teamId && matchesFilters(log, query),
+  );
+  return paginate(sortNewestFirst(matching), query);
+}
+
+/** Every entry in one team's slice that the filters match, for an export. */
+export function listAllTeamActivity(
+  actor: Actor,
+  teamId: string,
+  rawFilters: AuditLogFilters = {},
+): AuditLogView[] {
+  requireTeamPermission(actor, teamId, 'MANAGE_TEAM');
+  const filters = parseInput(auditFiltersSchema, rawFilters);
+  return sortNewestFirst(
+    getDatabase().auditLogs.filter((log) => log.teamId === teamId && matchesFilters(log, filters)),
+  );
+}
+
+/** Distinct action names present in one team's slice of the log. */
+export function listTeamActivityActions(actor: Actor, teamId: string): string[] {
+  requireTeamPermission(actor, teamId, 'MANAGE_TEAM');
+  return [
+    ...new Set(
+      getDatabase()
+        .auditLogs.filter((log) => log.teamId === teamId)
+        .map((log) => log.action),
+    ),
+  ].sort();
+}
+
 export interface AuditActorOption {
   id: string;
   /** The account's name and email, or the bare id once the account itself is gone. */
   label: string;
+}
+
+function toActorOptions(ids: string[]): AuditActorOption[] {
+  const users = getDatabase().users;
+  return ids
+    .map((id) => {
+      const user = users.find((candidate) => candidate.id === id);
+      return { id, label: user ? `${user.displayName} (${user.email})` : id };
+    })
+    .sort((a, b) => a.label.localeCompare(b.label));
 }
 
 /**
@@ -125,13 +189,23 @@ export interface AuditActorOption {
  * are still there and still worth reaching.
  */
 export function listAuditActors(): AuditActorOption[] {
-  const db = getDatabase();
-  const ids = [...new Set(db.auditLogs.flatMap((log) => (log.actorId ? [log.actorId] : [])))];
+  return toActorOptions([
+    ...new Set(getDatabase().auditLogs.flatMap((log) => (log.actorId ? [log.actorId] : []))),
+  ]);
+}
 
-  return ids
-    .map((id) => {
-      const user = db.users.find((candidate) => candidate.id === id);
-      return { id, label: user ? `${user.displayName} (${user.email})` : id };
-    })
-    .sort((a, b) => a.label.localeCompare(b.label));
+/**
+ * The accounts that appear in one team's slice of the log. Deliberately not the platform-wide
+ * list: a team owner may see who acted on their team, which is a much smaller set than every
+ * account that has ever done anything.
+ */
+export function listTeamActivityActors(actor: Actor, teamId: string): AuditActorOption[] {
+  requireTeamPermission(actor, teamId, 'MANAGE_TEAM');
+  return toActorOptions([
+    ...new Set(
+      getDatabase().auditLogs.flatMap((log) =>
+        log.teamId === teamId && log.actorId ? [log.actorId] : [],
+      ),
+    ),
+  ]);
 }
