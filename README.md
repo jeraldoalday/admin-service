@@ -51,10 +51,10 @@ data** in the sidebar puts it back to the seeded dataset and signs you out.
 | `/`               | signed in      | Overview — your teams, and for admins the platform totals and activity |
 | `/account`        | signed in      | Your own display name and password                                     |
 | `/teams`          | signed in      | Teams you belong to, and the form that creates one                     |
-| `/teams/:teamId`  | member         | One team: members, invites, API keys, and settings                     |
+| `/teams/:teamId`  | member         | One team: members, invites, API keys, activity, and settings           |
 | `/invites/:token` | signed in      | Accept an invite addressed to your account's email                     |
-| `/users`          | platform admin | Every account: search, filter, edit, delete                            |
-| `/audit-logs`     | platform admin | Append-only history of every mutation, filterable                      |
+| `/users`          | platform admin | Every account: search, filter, sort, edit, delete                      |
+| `/audit-logs`     | platform admin | Append-only history of every mutation, filterable by actor and text    |
 
 Team screens only render the sections the caller's permissions cover, and the domain layer
 enforces the same rules independently — a screen you can reach still cannot perform an action
@@ -101,20 +101,36 @@ someone holding `MANAGE_API_KEYS` can create, list, revoke, or rotate one. The p
 (`sk_…`) is returned exactly once, from creation and rotation; only a SHA-256 digest and a
 display-safe prefix are stored. Each key carries its own subset of the five permissions, keys
 are scoped to one team and rejected against another's data, and rotation kills the old secret
-immediately. The API keys screen includes a panel that exercises a key against the
-machine-facing read, so those guarantees are visible rather than merely documented.
+immediately. A key may carry an expiry, and — as with an invite — that expiry is derived as the
+key is read rather than taken from the row: a lapsed key reads as `EXPIRED` everywhere at once,
+drops out of the active filter, and stops offering rotation, which would otherwise have copied
+the dead expiry onto the replacement. A key inside its last week is flagged on screen, since the
+useful moment to rotate is before a caller starts failing. The API keys screen includes a panel
+that exercises a key against the machine-facing read, so those guarantees are visible rather
+than merely documented.
 
 **The audit log** is append-only, written by the domain layer rather than by the screens, which
 is what makes it a complete record instead of a sample. Every user, team, membership, invite,
-permission, and API key mutation lands in it. It filters by action, by target type, and by
-date range, where a bare calendar date names the whole day it stands for rather than the
-instant it begins.
+permission, and API key mutation lands in it. It filters by action, by target type, by actor,
+by free text over the action, target, and metadata, and by date range, where a bare calendar
+date names the whole day it stands for rather than the instant it begins. An actor is shown by
+the account's current name and email, resolved as the log is read — the entry itself is never
+rewritten when somebody renames themselves, and an entry left behind by a deleted account stays
+reachable by its id.
 
-**Exports** cover everything the current filters match, from the audit log and from the
-account list alike — not the page on screen, and not the first hundred rows either, since
-both read through an unpaginated query that shares its filters with the paged one. Fields are
-quoted per RFC 4180, and values that begin with `=`, `+`, `-`, or `@` are prefixed, so a
-spreadsheet reads a user-chosen display name as text rather than as a formula.
+Entries carry the team they belong to, stamped at write time rather than inferred on read,
+which is what makes a team's own slice of the log readable by the people who run that team
+without widening what anybody can see. The platform log at `/audit-logs` stays admin-only; the
+**Activity** tab on a team screen shows that team's entries to a caller holding `MANAGE_TEAM`,
+with the same filters and its own export.
+
+**Exports** cover everything the current filters match, from the audit log, a team's activity,
+and the account list alike — not the page on screen, and not the first hundred rows either,
+since each reads through an unpaginated query that shares its filters with the paged one.
+Ordering travels with those filters, so a file arrives in the order the screen asked for rather
+than one the reader has to redo by hand. Fields are quoted per RFC 4180, and values that begin
+with `=`, `+`, `-`, or `@` are prefixed, so a spreadsheet reads a user-chosen display name as
+text rather than as a formula.
 
 Failures use the same error types the rules always had — `BadRequestError`, `Unauthorized`,
 `Forbidden`, `NotFound`, `Conflict` — and screens render them in place instead of unmounting.
@@ -135,6 +151,7 @@ src/
   components/            Layout, table, and form primitives
   pages/                 One module per screen; team/ holds the team tabs
     AccountPage.tsx      Self-service name and password
+    team/ActivityTab.tsx One team's slice of the audit log
   lib/
     format.ts            Date and permission formatting
     csv.ts               RFC 4180 serialisation for exports
@@ -165,7 +182,7 @@ drive it the way a person would; nothing is mocked. The SHA-256 implementation i
 against `node:crypto` directly, since API key lookup depends on the two agreeing.
 
 `npm run test:coverage` reports on the domain and app layers and fails below its thresholds —
-currently around 97% of statements and 91% of branches, with the thresholds set just under
+currently around 97% of statements and 92% of branches, with the thresholds set just under
 that so a real regression trips them and an ordinary refactor does not. `npm run check` runs
 lint, formatting, types, and that covered suite in one pass, which is exactly what CI runs.
 The screens are covered through the whole-app tests rather than by chasing a number.
