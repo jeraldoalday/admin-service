@@ -17,14 +17,37 @@ import {
   toErrorMessage,
   users,
   type AdminUserView,
+  type SortDirection,
   type UpdateUserInput,
   type UserFilters,
   type UserRole,
+  type UserSortField,
 } from '@/domain';
 import { downloadTextFile, toCsv } from '@/lib/csv';
 import { formatDate } from '@/lib/format';
 
 type ActiveFilter = 'all' | 'true' | 'false';
+
+/**
+ * The direction a column starts in when it is first clicked. Dates open newest-first, since
+ * "who joined recently" is the question a date column is usually being asked; names and
+ * roles open A-to-Z, which is the order a reader scanning for one is expecting.
+ */
+const INITIAL_DIRECTION: Record<UserSortField, SortDirection> = {
+  createdAt: 'desc',
+  displayName: 'asc',
+  email: 'asc',
+  role: 'asc',
+};
+
+const COLUMNS = [
+  { label: 'Name', sortKey: 'displayName' },
+  { label: 'Email', sortKey: 'email' },
+  { label: 'Role', sortKey: 'role' },
+  { label: 'Status' },
+  { label: 'Joined', sortKey: 'createdAt' },
+  { label: '' },
+];
 
 /** Admin-only account management: search, filter, edit, and delete platform accounts. */
 export function UsersPage(): ReactNode {
@@ -33,6 +56,8 @@ export function UsersPage(): ReactNode {
   const [search, setSearch] = useState('');
   const [role, setRole] = useState<'all' | UserRole>('all');
   const [isActive, setIsActive] = useState<ActiveFilter>('all');
+  const [sort, setSort] = useState<UserSortField>('createdAt');
+  const [direction, setDirection] = useState<SortDirection>('desc');
   const [editing, setEditing] = useState<AdminUserView | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -42,9 +67,29 @@ export function UsersPage(): ReactNode {
     ...(search.trim() ? { search: search.trim() } : {}),
     ...(role === 'all' ? {} : { role }),
     ...(isActive === 'all' ? {} : { isActive: isActive === 'true' }),
+    sort,
+    direction,
   };
 
   const result = useLiveQuery(() => users.listUsers(actor, { ...filters, page, pageSize: 10 }));
+
+  /**
+   * Clicking the column already sorted on flips its direction; clicking a different one
+   * switches to it in whichever direction that column reads best. Either way the reader goes
+   * back to the first page, since page four of the old ordering is not a place they asked
+   * to be.
+   */
+  function changeSort(key: string): void {
+    const field = key as UserSortField;
+    changeFilter(() => {
+      if (field === sort) {
+        setDirection((previous) => (previous === 'asc' ? 'desc' : 'asc'));
+        return;
+      }
+      setSort(field);
+      setDirection(INITIAL_DIRECTION[field]);
+    });
+  }
 
   function changeFilter(apply: () => void): void {
     apply();
@@ -149,7 +194,7 @@ export function UsersPage(): ReactNode {
         {result.items.length === 0 ? (
           <EmptyState>No accounts match these filters.</EmptyState>
         ) : (
-          <DataTable columns={['Name', 'Email', 'Role', 'Status', 'Joined', '']}>
+          <DataTable columns={COLUMNS} sort={{ key: sort, direction, onChange: changeSort }}>
             {result.items.map((user) => (
               <tr key={user.id}>
                 <td>{user.displayName}</td>

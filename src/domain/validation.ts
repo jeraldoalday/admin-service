@@ -16,7 +16,7 @@ export const paginationSchema = z.object({
 export const userRoleEnum = z.enum(['ADMIN', 'MEMBER']);
 export const teamRoleEnum = z.enum(['OWNER', 'ADMIN', 'MEMBER']);
 export const inviteStatusEnum = z.enum(['PENDING', 'ACCEPTED', 'REVOKED', 'EXPIRED']);
-export const apiKeyStatusEnum = z.enum(['ACTIVE', 'REVOKED']);
+export const apiKeyStatusEnum = z.enum(['ACTIVE', 'REVOKED', 'EXPIRED']);
 export const teamPermissionEnum = z.enum([
   'MANAGE_TEAM',
   'MANAGE_MEMBERS',
@@ -75,11 +75,31 @@ const userFilterFields = {
   search: z.string().trim().min(1).max(200).optional(),
 };
 
+export const userSortEnum = z.enum(['createdAt', 'displayName', 'email', 'role']);
+export type UserSortField = z.infer<typeof userSortEnum>;
+
+export const sortDirectionEnum = z.enum(['asc', 'desc']);
+export type SortDirection = z.infer<typeof sortDirectionEnum>;
+
+/**
+ * Ordering travels with the filters rather than with the pagination, because an export has
+ * to honour it too: a file whose rows arrive in a different order from the screen that asked
+ * for it is a file somebody has to re-sort by hand. Newest-first stays the default, which is
+ * what the list did before ordering was a choice at all.
+ */
+const userSortFields = {
+  sort: userSortEnum.default('createdAt'),
+  direction: sortDirectionEnum.default('desc'),
+};
+
 /** The filter set on its own, for reads that want every match rather than a page of them. */
-export const userFiltersSchema = z.object(userFilterFields);
+export const userFiltersSchema = z.object({ ...userFilterFields, ...userSortFields });
 export type UserFilters = z.input<typeof userFiltersSchema>;
 
-export const listUsersQuerySchema = paginationSchema.extend(userFilterFields);
+export const listUsersQuerySchema = paginationSchema.extend({
+  ...userFilterFields,
+  ...userSortFields,
+});
 export type ListUsersQuery = z.input<typeof listUsersQuerySchema>;
 
 export const updateUserSchema = z
@@ -171,6 +191,9 @@ export function endOfBoundary(value: string): number {
 const auditFilterFields = {
   action: z.string().trim().min(1).max(100).optional(),
   targetType: z.string().trim().min(1).max(100).optional(),
+  actorId: z.string().trim().min(1).max(100).optional(),
+  teamId: z.string().trim().min(1).max(100).optional(),
+  search: z.string().trim().min(1).max(200).optional(),
   from: dateBoundary.optional(),
   to: dateBoundary.optional(),
 };

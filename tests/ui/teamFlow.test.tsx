@@ -13,7 +13,7 @@ describe('the team screen', () => {
     openTeam(adminActor().id);
 
     expect(screen.getByRole('heading', { name: 'Platform' })).toBeInTheDocument();
-    ['Members', 'Invites', 'API keys', 'Settings'].forEach((tab) => {
+    ['Members', 'Invites', 'API keys', 'Activity', 'Settings'].forEach((tab) => {
       expect(screen.getByRole('button', { name: tab })).toBeInTheDocument();
     });
   });
@@ -274,6 +274,72 @@ describe('API keys', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(
       'Authenticated. The key read 3 members.',
     );
+  });
+
+  it('shows a lapsed key as expired, with nothing left to do to it', async () => {
+    const platform = teamIdBySlug('platform');
+    const { apiKey } = apiKeys.createApiKey(adminActor(), platform, {
+      name: 'lapsed-key',
+      permissions: [],
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    });
+    const stored = getDatabase().apiKeys.find((candidate) => candidate.id === apiKey.id);
+    if (stored) stored.expiresAt = new Date(Date.now() - 1000).toISOString();
+
+    const { user } = openTeam(adminActor().id);
+    await user.click(screen.getByRole('button', { name: 'API keys' }));
+
+    const row = within(screen.getByText('lapsed-key').closest('tr') as HTMLElement);
+    expect(row.getByText('EXPIRED')).toBeInTheDocument();
+    expect(row.queryByRole('button', { name: 'Rotate' })).not.toBeInTheDocument();
+    expect(row.queryByRole('button', { name: 'Revoke' })).not.toBeInTheDocument();
+  });
+
+  it('warns about a key that is inside its last week', async () => {
+    const platform = teamIdBySlug('platform');
+    apiKeys.createApiKey(adminActor(), platform, {
+      name: 'nearly-up',
+      permissions: [],
+      expiresAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+    });
+
+    const { user } = openTeam(adminActor().id);
+    await user.click(screen.getByRole('button', { name: 'API keys' }));
+
+    expect(await screen.findByText(/Key "nearly-up" expires in 2 days/)).toBeInTheDocument();
+  });
+
+  it('leaves a key with a distant expiry unremarked', async () => {
+    const platform = teamIdBySlug('platform');
+    apiKeys.createApiKey(adminActor(), platform, {
+      name: 'long-lived',
+      permissions: [],
+      expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
+    });
+
+    const { user } = openTeam(adminActor().id);
+    await user.click(screen.getByRole('button', { name: 'API keys' }));
+
+    expect(screen.queryByText(/expires in/)).not.toBeInTheDocument();
+  });
+
+  it('filters the table down to the expired keys', async () => {
+    const platform = teamIdBySlug('platform');
+    const { apiKey } = apiKeys.createApiKey(adminActor(), platform, {
+      name: 'lapsed-key',
+      permissions: [],
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    });
+    const stored = getDatabase().apiKeys.find((candidate) => candidate.id === apiKey.id);
+    if (stored) stored.expiresAt = new Date(Date.now() - 1000).toISOString();
+
+    const { user } = openTeam(adminActor().id);
+    await user.click(screen.getByRole('button', { name: 'API keys' }));
+    await user.selectOptions(screen.getByLabelText('Status'), 'EXPIRED');
+
+    const table = within(screen.getByRole('table'));
+    expect(table.getByText('lapsed-key')).toBeInTheDocument();
+    expect(table.queryByText('ci-pipeline')).not.toBeInTheDocument();
   });
 
   it('revokes a key from the table', async () => {

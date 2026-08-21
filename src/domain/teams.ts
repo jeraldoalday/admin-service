@@ -128,6 +128,7 @@ export function createTeam(actor: Actor, rawInput: CreateTeamInput): TeamWithRol
     action: 'team.created',
     targetType: 'team',
     targetId: team.id,
+    teamId: team.id,
     metadata: { name: team.name, slug: team.slug },
   });
 
@@ -175,6 +176,7 @@ export function updateTeam(actor: Actor, teamId: string, rawInput: UpdateTeamInp
     action: 'team.updated',
     targetType: 'team',
     targetId: teamId,
+    teamId,
     metadata: { name: input.name },
   });
 
@@ -200,6 +202,7 @@ export function deleteTeam(actor: Actor, teamId: string): void {
     action: 'team.deleted',
     targetType: 'team',
     targetId: teamId,
+    teamId,
   });
 }
 
@@ -284,6 +287,7 @@ export function reassignTeamsOwnedSolelyBy(
         action: 'team.deleted',
         targetType: 'team',
         targetId: teamId,
+        teamId,
         metadata: { reason: 'last_owner_deleted' },
       });
 
@@ -299,6 +303,7 @@ export function reassignTeamsOwnedSolelyBy(
       action: 'team.member.role_updated',
       targetType: 'team_membership',
       targetId: `${teamId}:${successor.userId}`,
+      teamId,
       metadata: { role: 'OWNER', reason: 'previous_owner_deleted' },
     });
 
@@ -386,6 +391,7 @@ export function updateMemberRole(
     action: 'team.member.role_updated',
     targetType: 'team_membership',
     targetId: `${teamId}:${targetUserId}`,
+    teamId,
     metadata: { role },
   });
 
@@ -420,6 +426,7 @@ export function removeMember(actor: Actor, teamId: string, targetUserId: string)
     action: 'team.member.removed',
     targetType: 'team_membership',
     targetId: `${teamId}:${targetUserId}`,
+    teamId,
   });
 }
 
@@ -445,6 +452,7 @@ export function leaveTeam(actor: Actor, teamId: string): void {
     action: 'team.member.left',
     targetType: 'team_membership',
     targetId: `${teamId}:${current.id}`,
+    teamId,
   });
 }
 
@@ -498,6 +506,7 @@ export function createInvite(
     action: 'team.invite.created',
     targetType: 'team_invite',
     targetId: invite.id,
+    teamId,
     metadata: { email: invite.email, role: invite.role },
   });
 
@@ -528,7 +537,21 @@ export function revokeInvite(actor: Actor, teamId: string, inviteId: string): vo
   if (!invite || invite.teamId !== teamId) {
     throw new NotFoundError('Invite not found');
   }
-  if (invite.status !== 'PENDING') {
+
+  // The derived status, not the stored one: a row that aged out still reads PENDING until
+  // something settles it, and revoking it would have overwritten a true EXPIRED with a
+  // REVOKED that never happened — a rewrite of history rather than a record of it. As on
+  // acceptance, the row is settled on the way past so the next reader sees the truth.
+  const status = effectiveInviteStatus(invite);
+  if (status === 'EXPIRED') {
+    if (invite.status === 'PENDING') {
+      mutate(() => {
+        invite.status = 'EXPIRED';
+      });
+    }
+    throw new BadRequestError('This invite has already expired');
+  }
+  if (status !== 'PENDING') {
     throw new BadRequestError('Only pending invites can be revoked');
   }
 
@@ -541,6 +564,7 @@ export function revokeInvite(actor: Actor, teamId: string, inviteId: string): vo
     action: 'team.invite.revoked',
     targetType: 'team_invite',
     targetId: inviteId,
+    teamId,
   });
 }
 
@@ -604,7 +628,8 @@ export function acceptInvite(actor: Actor, token: string): TeamWithRole {
     action: 'team.invite.accepted',
     targetType: 'team_invite',
     targetId: invite.id,
-    metadata: { teamId: invite.teamId, role: invite.role },
+    teamId: invite.teamId,
+    metadata: { role: invite.role },
   });
 
   return { ...toTeamView(team), role: invite.role };

@@ -209,6 +209,23 @@ describe('invites', () => {
     expect(expired.map((row) => row.id)).toContain(invite.id);
   });
 
+  it('refuses to revoke an invite that has already aged out', () => {
+    const admin = adminActor();
+    const platform = teamIdBySlug('platform');
+    const invite = teams.createInvite(admin, platform, { email: 'stale@example.com' });
+
+    const stored = getDatabase().invites.find((candidate) => candidate.id === invite.id);
+    if (stored) stored.expiresAt = new Date(Date.now() - 1000).toISOString();
+
+    // Revoking would overwrite a true EXPIRED with a REVOKED that nobody decided on, and
+    // would write an audit entry recording that decision.
+    expect(() => teams.revokeInvite(admin, platform, invite.id)).toThrow(
+      'This invite has already expired',
+    );
+    expect(getDatabase().invites.find((row) => row.id === invite.id)?.status).toBe('EXPIRED');
+    expect(audit.listAuditLogs({ action: 'team.invite.revoked' }).total).toBe(0);
+  });
+
   it('revokes only pending invites', () => {
     const admin = adminActor();
     const platform = teamIdBySlug('platform');

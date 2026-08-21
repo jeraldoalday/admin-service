@@ -13,6 +13,13 @@ describe('the overview', () => {
     expect(screen.getByRole('heading', { name: 'Recent activity' })).toBeInTheDocument();
   });
 
+  it('says who performed each recent entry, not just what happened', () => {
+    renderApp({ userId: adminActor().id });
+
+    const activity = screen.getByRole('heading', { name: 'Recent activity' }).closest('section');
+    expect(within(activity as HTMLElement).getAllByText(/Avery Admin/).length).toBeGreaterThan(0);
+  });
+
   it('leaves the platform-wide figures out for a member', () => {
     renderApp({ userId: danaActor().id });
 
@@ -59,6 +66,75 @@ describe('the audit log screen', () => {
     const table = within(screen.getByRole('table'));
     expect(table.getAllByRole('row')).toHaveLength(3);
     expect(table.getByText('{"displayName":"Dana D."}')).toBeInTheDocument();
+  });
+
+  it('names who performed each entry rather than showing an opaque id', () => {
+    renderApp({ route: '/audit-logs', userId: adminActor().id });
+
+    const table = within(screen.getByRole('table'));
+    expect(table.getAllByText('Avery Admin (admin@example.com)')).toHaveLength(4);
+    expect(table.queryByText(adminActor().id)).not.toBeInTheDocument();
+  });
+
+  it('narrows the log to one actor', async () => {
+    const dana = danaActor();
+    teams.updateTeam(dana, teamIdBySlug('growth'), { name: 'Growth Core' });
+
+    const { user } = renderApp({ route: '/audit-logs', userId: adminActor().id });
+    await user.selectOptions(screen.getByLabelText('Actor'), dana.id);
+
+    const table = within(screen.getByRole('table'));
+    expect(table.getAllByRole('row')).toHaveLength(2);
+    expect(table.getByText('Dana Diaz (dana@example.com)')).toBeInTheDocument();
+  });
+
+  it('searches the details, where the interesting part of an entry lives', async () => {
+    const admin = adminActor();
+    teams.createInvite(admin, teamIdBySlug('platform'), { email: 'searchable@example.com' });
+
+    const { user } = renderApp({ route: '/audit-logs', userId: admin.id });
+    await user.type(screen.getByLabelText('Search'), 'searchable@example.com');
+
+    const table = within(screen.getByRole('table'));
+    expect(table.getAllByRole('row')).toHaveLength(2);
+    expect(table.getByText('team.invite.created')).toBeInTheDocument();
+  });
+
+  it('puts the search and the actor back with the other filters when cleared', async () => {
+    const { user } = renderApp({ route: '/audit-logs', userId: adminActor().id });
+
+    await user.type(screen.getByLabelText('Search'), 'nothing-matches-this');
+    expect(await screen.findByText('No entries match these filters.')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Clear filters' }));
+
+    expect(screen.getByLabelText('Search')).toHaveValue('');
+    expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(5);
+  });
+
+  it('narrows the log to one team, and marks what belongs to none', async () => {
+    const admin = adminActor();
+    users.updateUser(admin, danaActor().id, { displayName: 'Dana D.' });
+
+    const { user } = renderApp({ route: '/audit-logs', userId: admin.id });
+    await user.selectOptions(screen.getByLabelText('Team'), teamIdBySlug('platform'));
+
+    const table = within(screen.getByRole('table'));
+    expect(table.getAllByText('Platform').length).toBeGreaterThan(0);
+    expect(table.queryByText('user.updated')).not.toBeInTheDocument();
+  });
+
+  it('keeps a deleted team reachable by the entries it left behind', async () => {
+    const admin = adminActor();
+    const doomed = teams.createTeam(admin, { name: 'Doomed' });
+    teams.deleteTeam(admin, doomed.id);
+
+    const { user } = renderApp({ route: '/audit-logs', userId: admin.id });
+    await user.selectOptions(screen.getByLabelText('Team'), doomed.id);
+
+    const table = within(screen.getByRole('table'));
+    expect(table.getByText('team.deleted')).toBeInTheDocument();
+    expect(table.getAllByText(doomed.id).length).toBeGreaterThan(0);
   });
 
   it('exports everything the filters match, not just the visible page', async () => {

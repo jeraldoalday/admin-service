@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { screen, within } from '@testing-library/react';
-import { audit, getDatabase, users } from '@/domain';
+import { audit, auth, getDatabase, users } from '@/domain';
 import { adminActor } from '../helpers';
 import { renderApp } from '../renderApp';
 
@@ -184,6 +184,108 @@ describe('the edit dialog', () => {
 
     expect(field).toHaveFocus();
     expect(field).toHaveValue('Dana D.');
+  });
+});
+
+/** The visible order of the name column, which is what a reader actually sees. */
+function namesInOrder(): string[] {
+  return table()
+    .getAllByRole('row')
+    .slice(1)
+    .map((row) => row.querySelectorAll('td')[0]?.textContent ?? '');
+}
+
+describe('ordering the account list', () => {
+  it('opens newest first, with no column claiming to be sorted', () => {
+    renderAsAdmin();
+
+    expect(namesInOrder()).toEqual([
+      'Sam Lee',
+      'Mira Okafor',
+      'Raj Patel',
+      'Dana Diaz',
+      'Avery Admin',
+    ]);
+    expect(screen.getByRole('columnheader', { name: /Name/ })).not.toHaveAttribute('aria-sort');
+  });
+
+  it('sorts by a column from its header', async () => {
+    const { user } = renderAsAdmin();
+
+    await user.click(screen.getByRole('button', { name: /Name/ }));
+
+    expect(namesInOrder()).toEqual([
+      'Avery Admin',
+      'Dana Diaz',
+      'Mira Okafor',
+      'Raj Patel',
+      'Sam Lee',
+    ]);
+    expect(screen.getByRole('columnheader', { name: /Name/ })).toHaveAttribute(
+      'aria-sort',
+      'ascending',
+    );
+  });
+
+  it('flips the direction when the same header is clicked again', async () => {
+    const { user } = renderAsAdmin();
+
+    await user.click(screen.getByRole('button', { name: /Name/ }));
+    await user.click(screen.getByRole('button', { name: /Name/ }));
+
+    expect(namesInOrder()[0]).toBe('Sam Lee');
+    expect(screen.getByRole('columnheader', { name: /Name/ })).toHaveAttribute(
+      'aria-sort',
+      'descending',
+    );
+  });
+
+  it('starts a new column in the direction that column reads best', async () => {
+    const { user } = renderAsAdmin();
+
+    // Email opens A-to-Z even though the list was on a descending column beforehand.
+    await user.click(screen.getByRole('button', { name: /Joined/ }));
+    await user.click(screen.getByRole('button', { name: /Email/ }));
+
+    expect(screen.getByRole('columnheader', { name: /Email/ })).toHaveAttribute(
+      'aria-sort',
+      'ascending',
+    );
+    expect(namesInOrder()[0]).toBe('Avery Admin');
+  });
+
+  it('keeps the filters while the order changes', async () => {
+    const { user } = renderAsAdmin();
+
+    await user.selectOptions(screen.getByLabelText('Role'), 'MEMBER');
+    await user.click(screen.getByRole('button', { name: /Name/ }));
+
+    expect(namesInOrder()).toEqual(['Dana Diaz', 'Mira Okafor', 'Raj Patel', 'Sam Lee']);
+  });
+
+  it('goes back to the first page when the order changes', async () => {
+    // Ten rows to a page, so six more accounts is enough to make a second one.
+    for (let index = 0; index < 6; index += 1) {
+      auth.registerUser({
+        email: `filler${index}@example.com`,
+        password: 'a-good-password',
+        displayName: `Filler ${index}`,
+      });
+    }
+    const { user } = renderAsAdmin();
+
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByText(/Page 2 of/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Name/ }));
+    expect(screen.getByText(/Page 1 of/)).toBeInTheDocument();
+  });
+
+  it('leaves columns that cannot be ordered as plain headers', () => {
+    renderAsAdmin();
+
+    expect(screen.queryByRole('button', { name: 'Status' })).not.toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Status' })).toBeInTheDocument();
   });
 });
 

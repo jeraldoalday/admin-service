@@ -32,6 +32,19 @@ export function humanizePermission(permission: TeamPermission): string {
   return [first.charAt(0).toUpperCase() + first.slice(1), ...rest].join(' ');
 }
 
+/** How close an expiry is, as a tone a badge can wear. */
+export type ExpiryUrgency = 'never' | 'distant' | 'soon' | 'passed';
+
+/** A week's notice is the point at which an upcoming expiry is worth flagging on screen. */
+export const EXPIRY_WARNING_MS = 7 * 24 * 60 * 60 * 1000;
+
+export function expiryUrgency(iso: string | null): ExpiryUrgency {
+  if (!iso) return 'never';
+  const deltaMs = Date.parse(iso) - Date.now();
+  if (deltaMs <= 0) return 'passed';
+  return deltaMs <= EXPIRY_WARNING_MS ? 'soon' : 'distant';
+}
+
 export function relativeExpiry(iso: string | null): string {
   if (!iso) return 'never';
   const deltaMs = Date.parse(iso) - Date.now();

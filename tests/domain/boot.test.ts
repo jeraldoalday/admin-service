@@ -12,7 +12,11 @@ describe('bootstrapDatabase', () => {
   it('seeds demo data for a first-time visitor', () => {
     window.localStorage.clear();
 
-    expect(bootstrapDatabase(window.localStorage)).toEqual({ seeded: true, expiredInvites: 0 });
+    expect(bootstrapDatabase(window.localStorage)).toEqual({
+      seeded: true,
+      expiredInvites: 0,
+      expiredApiKeys: 0,
+    });
     expect(getDatabase().users).toHaveLength(5);
     expect(getDatabase().teams.map((team) => team.slug)).toEqual(['platform', 'growth']);
   });
@@ -23,19 +27,27 @@ describe('bootstrapDatabase', () => {
     previous.teams = [];
     replaceDatabase(previous);
 
-    expect(bootstrapDatabase(window.localStorage)).toEqual({ seeded: false, expiredInvites: 0 });
+    expect(bootstrapDatabase(window.localStorage)).toEqual({
+      seeded: false,
+      expiredInvites: 0,
+      expiredApiKeys: 0,
+    });
     expect(getDatabase().teams).toHaveLength(0);
   });
 
   it('seeds rather than failing when the stored data cannot be used', () => {
     window.localStorage.setItem(STORAGE_KEY, '{"version":0}');
 
-    expect(bootstrapDatabase(window.localStorage)).toEqual({ seeded: true, expiredInvites: 0 });
+    expect(bootstrapDatabase(window.localStorage)).toEqual({
+      seeded: true,
+      expiredInvites: 0,
+      expiredApiKeys: 0,
+    });
     expect(getDatabase().users).toHaveLength(5);
   });
 
   it('runs without any storage at all', () => {
-    expect(bootstrapDatabase(null)).toEqual({ seeded: true, expiredInvites: 0 });
+    expect(bootstrapDatabase(null)).toEqual({ seeded: true, expiredInvites: 0, expiredApiKeys: 0 });
     expect(getDatabase().users).toHaveLength(5);
   });
 
@@ -46,7 +58,11 @@ describe('bootstrapDatabase', () => {
     if (invite) invite.expiresAt = new Date(Date.now() - 1000).toISOString();
     replaceDatabase(previous);
 
-    expect(bootstrapDatabase(window.localStorage)).toEqual({ seeded: false, expiredInvites: 1 });
+    expect(bootstrapDatabase(window.localStorage)).toEqual({
+      seeded: false,
+      expiredInvites: 1,
+      expiredApiKeys: 0,
+    });
     expect(getDatabase().invites[0]?.status).toBe('EXPIRED');
   });
 

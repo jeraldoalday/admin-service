@@ -12,8 +12,10 @@ import {
   updateUserSchema,
   userFiltersSchema,
   type ListUsersQuery,
+  type SortDirection,
   type UpdateUserInput,
   type UserFilters,
+  type UserSortField,
 } from './validation';
 
 function toAdminUserView(user: UserRecord): AdminUserView {
@@ -25,6 +27,42 @@ interface ParsedFilters {
   role?: 'ADMIN' | 'MEMBER' | undefined;
   isActive?: boolean | undefined;
   search?: string | undefined;
+  sort: UserSortField;
+  direction: SortDirection;
+}
+
+/**
+ * Role sorts by seniority rather than alphabetically, since ADMIN before MEMBER is what
+ * somebody sorting a column headed "Role" is asking for; the two happen to agree here, but
+ * spelling it out keeps a third role from quietly landing in the wrong place later.
+ */
+const ROLE_ORDER: Record<UserRecord['role'], number> = { ADMIN: 0, MEMBER: 1 };
+
+function compareOn(a: UserRecord, b: UserRecord, field: UserSortField): number {
+  switch (field) {
+    case 'displayName':
+      return a.displayName.localeCompare(b.displayName);
+    case 'email':
+      return a.email.localeCompare(b.email);
+    case 'role':
+      return ROLE_ORDER[a.role] - ROLE_ORDER[b.role];
+    case 'createdAt':
+      return a.createdAt.localeCompare(b.createdAt);
+  }
+}
+
+/**
+ * Orders the list by the requested column. Ties fall back to newest-first, so a column with
+ * repeated values - every account sharing a role, say - still lands in a stable order rather
+ * than whatever the table happened to hold.
+ */
+function sortUsers(
+  users: UserRecord[],
+  field: UserSortField,
+  direction: SortDirection,
+): UserRecord[] {
+  const sign = direction === 'asc' ? 1 : -1;
+  return sortNewestFirst(users).sort((a, b) => sign * compareOn(a, b, field));
 }
 
 function matchesFilters(user: UserRecord, filters: ParsedFilters): boolean {
@@ -50,7 +88,7 @@ export function listUsers(
   const query = parseInput(listUsersQuerySchema, rawQuery);
   const matching = getDatabase().users.filter((user) => matchesFilters(user, query));
 
-  return paginate(sortNewestFirst(matching).map(toAdminUserView), query);
+  return paginate(sortUsers(matching, query.sort, query.direction).map(toAdminUserView), query);
 }
 
 /**
@@ -63,7 +101,7 @@ export function listAllUsers(actor: Actor, rawFilters: UserFilters = {}): AdminU
   const filters = parseInput(userFiltersSchema, rawFilters);
   const matching = getDatabase().users.filter((user) => matchesFilters(user, filters));
 
-  return sortNewestFirst(matching).map(toAdminUserView);
+  return sortUsers(matching, filters.sort, filters.direction).map(toAdminUserView);
 }
 
 function getUserRecordOrThrow(id: string): UserRecord {
