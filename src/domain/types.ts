@@ -37,8 +37,8 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<TeamRole, TeamPermission[]> = {
   MEMBER: [],
 };
 
-export type ApiKeyStatus = 'ACTIVE' | 'REVOKED';
-export const API_KEY_STATUSES: ApiKeyStatus[] = ['ACTIVE', 'REVOKED'];
+export type ApiKeyStatus = 'ACTIVE' | 'REVOKED' | 'EXPIRED';
+export const API_KEY_STATUSES: ApiKeyStatus[] = ['ACTIVE', 'REVOKED', 'EXPIRED'];
 
 export interface UserRecord {
   id: string;

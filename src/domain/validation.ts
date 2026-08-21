@@ -16,7 +16,7 @@ export const paginationSchema = z.object({
 export const userRoleEnum = z.enum(['ADMIN', 'MEMBER']);
 export const teamRoleEnum = z.enum(['OWNER', 'ADMIN', 'MEMBER']);
 export const inviteStatusEnum = z.enum(['PENDING', 'ACCEPTED', 'REVOKED', 'EXPIRED']);
-export const apiKeyStatusEnum = z.enum(['ACTIVE', 'REVOKED']);
+export const apiKeyStatusEnum = z.enum(['ACTIVE', 'REVOKED', 'EXPIRED']);
 export const teamPermissionEnum = z.enum([
   'MANAGE_TEAM',
   'MANAGE_MEMBERS',

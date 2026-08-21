@@ -5,7 +5,7 @@ import { requireActor, requireTeamPermission, type Actor } from './guards';
 import { createId, createToken, nowIso } from './ids';
 import { paginate, sortNewestFirst, type PaginatedResult } from './pagination';
 import { sha256Hex } from './sha256';
-import type { ApiKeyRecord, ApiKeyView, TeamPermission } from './types';
+import type { ApiKeyRecord, ApiKeyStatus, ApiKeyView, TeamPermission } from './types';
 import {
   createApiKeySchema,
   listApiKeysQuerySchema,
@@ -22,6 +22,26 @@ export function hashApiKeySecret(secret: string): string {
   return sha256Hex(secret);
 }
 
+/**
+ * The status a key actually has right now, rather than the one last written to it.
+ *
+ * A key past its expiry is already dead — `authenticateApiKey` refuses it — but nothing
+ * rewrites the row to say so, so the stored status kept reading ACTIVE and every screen
+ * repeated the claim: the keys tab showed a positive badge, the status filter counted it
+ * among the live keys, and Rotate was still on offer. Rotation is the part that turned a
+ * cosmetic lie into a real one, since it copies the old key's expiry onto the replacement
+ * and would have minted a secret that was dead the moment it was issued.
+ *
+ * Deriving the status on read is what keeps those three honest at once, exactly as
+ * `effectiveInviteStatus` does for an invite that aged out.
+ */
+export function effectiveApiKeyStatus(key: ApiKeyRecord, now = Date.now()): ApiKeyStatus {
+  if (key.status === 'ACTIVE' && key.expiresAt && Date.parse(key.expiresAt) <= now) {
+    return 'EXPIRED';
+  }
+  return key.status;
+}
+
 function toApiKeyView(key: ApiKeyRecord): ApiKeyView {
   const {
     id,
@@ -29,7 +49,6 @@ function toApiKeyView(key: ApiKeyRecord): ApiKeyView {
     name,
     keyPrefix,
     permissions,
-    status,
     expiresAt,
     lastUsedAt,
     revokedAt,
@@ -42,7 +61,7 @@ function toApiKeyView(key: ApiKeyRecord): ApiKeyView {
     name,
     keyPrefix,
     permissions: [...permissions],
-    status,
+    status: effectiveApiKeyStatus(key),
     expiresAt,
     lastUsedAt,
     revokedAt,
@@ -119,7 +138,7 @@ export function listApiKeys(
   const query = parseInput(listApiKeysQuerySchema, rawQuery);
 
   const matching = getDatabase().apiKeys.filter(
-    (key) => key.teamId === teamId && (!query.status || key.status === query.status),
+    (key) => key.teamId === teamId && (!query.status || effectiveApiKeyStatus(key) === query.status),
   );
 
   return paginate(sortNewestFirst(matching).map(toApiKeyView), query);
@@ -135,8 +154,12 @@ export function revokeApiKey(actor: Actor, teamId: string, keyId: string): ApiKe
   requireTeamPermission(actor, teamId, 'MANAGE_API_KEYS');
 
   const apiKey = getOwnedApiKeyOrThrow(teamId, keyId);
-  if (apiKey.status === 'REVOKED') {
+  const status = effectiveApiKeyStatus(apiKey);
+  if (status === 'REVOKED') {
     throw new BadRequestError('This API key is already revoked');
+  }
+  if (status === 'EXPIRED') {
+    throw new BadRequestError('This API key has already expired');
   }
 
   const updated = mutate(() => {
@@ -170,8 +193,13 @@ export function rotateApiKey(
   requireTeamPermission(actor, teamId, 'MANAGE_API_KEYS');
 
   const apiKey = getOwnedApiKeyOrThrow(teamId, keyId);
-  if (apiKey.status === 'REVOKED') {
+  const status = effectiveApiKeyStatus(apiKey);
+  if (status === 'REVOKED') {
     throw new BadRequestError('This API key is already revoked; create a new one instead');
+  }
+  // Rotation carries the expiry across, so rotating a dead key would only mint another one.
+  if (status === 'EXPIRED') {
+    throw new BadRequestError('This API key has expired; create a new one instead');
   }
 
   const secret = generateSecret();
@@ -232,11 +260,16 @@ export function authenticateApiKey(secret: string, teamId: string): ApiKeyPrinci
   const hash = hashApiKeySecret(trimmed);
   const apiKey = getDatabase().apiKeys.find((candidate) => candidate.keyHash === hash);
 
-  if (!apiKey || apiKey.teamId !== teamId || apiKey.status !== 'ACTIVE') {
+  if (!apiKey || apiKey.teamId !== teamId) {
     throw new UnauthorizedError('Invalid or revoked API key');
   }
-  if (apiKey.expiresAt && Date.parse(apiKey.expiresAt) < Date.now()) {
+
+  const status = effectiveApiKeyStatus(apiKey);
+  if (status === 'EXPIRED') {
     throw new UnauthorizedError('This API key has expired');
+  }
+  if (status !== 'ACTIVE') {
+    throw new UnauthorizedError('Invalid or revoked API key');
   }
 
   mutate(() => {
