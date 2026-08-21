@@ -163,6 +163,31 @@ export function listTeamActivityActions(actor: Actor, teamId: string): string[] 
   ].sort();
 }
 
+export interface AuditTeamOption {
+  id: string;
+  /** The team's current name, or its bare id once the team itself is gone. */
+  label: string;
+}
+
+/**
+ * The teams that appear in the log, for populating the team filter.
+ *
+ * A deleted team keeps its id as the label rather than dropping out of the list: its entries
+ * are exactly the ones somebody asking what happened to it is looking for, and the last of
+ * them is the deletion itself.
+ */
+export function listAuditTeams(): AuditTeamOption[] {
+  const db = getDatabase();
+  const ids = [...new Set(db.auditLogs.flatMap((log) => (log.teamId ? [log.teamId] : [])))];
+
+  return ids
+    .map((id) => {
+      const team = db.teams.find((candidate) => candidate.id === id);
+      return { id, label: team ? team.name : id };
+    })
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
 export interface AuditActorOption {
   id: string;
   /** The account's name and email, or the bare id once the account itself is gone. */

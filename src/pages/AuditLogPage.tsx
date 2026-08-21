@@ -13,6 +13,7 @@ export function AuditLogPage(): ReactNode {
   const [action, setAction] = useState('');
   const [targetType, setTargetType] = useState('');
   const [actorId, setActorId] = useState('');
+  const [teamId, setTeamId] = useState('');
   const [search, setSearch] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -23,6 +24,7 @@ export function AuditLogPage(): ReactNode {
     ...(action ? { action } : {}),
     ...(targetType ? { targetType } : {}),
     ...(actorId ? { actorId } : {}),
+    ...(teamId ? { teamId } : {}),
     ...(search.trim() ? { search: search.trim() } : {}),
     ...(from ? { from } : {}),
     ...(to ? { to } : {}),
@@ -35,6 +37,8 @@ export function AuditLogPage(): ReactNode {
   const actions = useLiveQuery(() => audit.listAuditActions());
   const targetTypes = useLiveQuery(() => audit.listAuditTargetTypes());
   const actors = useLiveQuery(() => audit.listAuditActors());
+  const auditTeams = useLiveQuery(() => audit.listAuditTeams());
+  const teamLabels = new Map(auditTeams.map((candidate) => [candidate.id, candidate.label]));
   const actorLabels = new Map(actors.map((candidate) => [candidate.id, candidate.label]));
 
   function changeFilter(apply: () => void): void {
@@ -49,6 +53,7 @@ export function AuditLogPage(): ReactNode {
       setAction('');
       setTargetType('');
       setActorId('');
+      setTeamId('');
       setSearch('');
       setFrom('');
       setTo('');
@@ -74,6 +79,10 @@ export function AuditLogPage(): ReactNode {
             entry.actorId ? (actorLabels.get(entry.actorId) ?? entry.actorId) : '',
         },
         { header: 'Actor ID', value: (entry) => entry.actorId },
+        {
+          header: 'Team',
+          value: (entry) => (entry.teamId ? (teamLabels.get(entry.teamId) ?? entry.teamId) : ''),
+        },
         { header: 'Target type', value: (entry) => entry.targetType },
         { header: 'Target', value: (entry) => entry.targetId },
         { header: 'Details', value: (entry) => entry.metadata },
@@ -140,6 +149,19 @@ export function AuditLogPage(): ReactNode {
               ))}
             </select>
           </Field>
+          <Field label="Team" hint="Platform-level entries belong to no team.">
+            <select
+              value={teamId}
+              onChange={(event) => changeFilter(() => setTeamId(event.target.value))}
+            >
+              <option value="">Any team</option>
+              {auditTeams.map((candidate) => (
+                <option key={candidate.id} value={candidate.id}>
+                  {candidate.label}
+                </option>
+              ))}
+            </select>
+          </Field>
           <Field label="Search" hint="Matches the action, the target, and the details.">
             <input
               type="search"
@@ -181,7 +203,7 @@ export function AuditLogPage(): ReactNode {
           <EmptyState>No entries match these filters.</EmptyState>
         ) : (
           <>
-            <DataTable columns={['When', 'Action', 'Actor', 'Target', 'Details']}>
+            <DataTable columns={['When', 'Action', 'Actor', 'Team', 'Target', 'Details']}>
               {result.data.items.map((entry) => (
                 <tr key={entry.id}>
                   <td className="cell--muted">{formatDateTime(entry.createdAt)}</td>
@@ -190,6 +212,9 @@ export function AuditLogPage(): ReactNode {
                   </td>
                   <td className="cell--muted">
                     {entry.actorId ? (actorLabels.get(entry.actorId) ?? entry.actorId) : 'system'}
+                  </td>
+                  <td className="cell--muted">
+                    {entry.teamId ? (teamLabels.get(entry.teamId) ?? entry.teamId) : '—'}
                   </td>
                   <td className="cell--muted">
                     {entry.targetType}

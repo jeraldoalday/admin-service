@@ -105,6 +105,31 @@ describe('the audit log screen', () => {
     expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(5);
   });
 
+  it('narrows the log to one team, and marks what belongs to none', async () => {
+    const admin = adminActor();
+    users.updateUser(admin, danaActor().id, { displayName: 'Dana D.' });
+
+    const { user } = renderApp({ route: '/audit-logs', userId: admin.id });
+    await user.selectOptions(screen.getByLabelText('Team'), teamIdBySlug('platform'));
+
+    const table = within(screen.getByRole('table'));
+    expect(table.getAllByText('Platform').length).toBeGreaterThan(0);
+    expect(table.queryByText('user.updated')).not.toBeInTheDocument();
+  });
+
+  it('keeps a deleted team reachable by the entries it left behind', async () => {
+    const admin = adminActor();
+    const doomed = teams.createTeam(admin, { name: 'Doomed' });
+    teams.deleteTeam(admin, doomed.id);
+
+    const { user } = renderApp({ route: '/audit-logs', userId: admin.id });
+    await user.selectOptions(screen.getByLabelText('Team'), doomed.id);
+
+    const table = within(screen.getByRole('table'));
+    expect(table.getByText('team.deleted')).toBeInTheDocument();
+    expect(table.getAllByText(doomed.id).length).toBeGreaterThan(0);
+  });
+
   it('exports everything the filters match, not just the visible page', async () => {
     const admin = adminActor();
     users.updateUser(admin, danaActor().id, { displayName: 'Dana D.' });
