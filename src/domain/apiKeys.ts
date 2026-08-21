@@ -138,7 +138,8 @@ export function listApiKeys(
   const query = parseInput(listApiKeysQuerySchema, rawQuery);
 
   const matching = getDatabase().apiKeys.filter(
-    (key) => key.teamId === teamId && (!query.status || effectiveApiKeyStatus(key) === query.status),
+    (key) =>
+      key.teamId === teamId && (!query.status || effectiveApiKeyStatus(key) === query.status),
   );
 
   return paginate(sortNewestFirst(matching).map(toApiKeyView), query);
@@ -238,6 +239,32 @@ export function rotateApiKey(
   });
 
   return { apiKey: toApiKeyView(issued), secret };
+}
+
+/**
+ * Settles every stored key whose expiry has passed, and reports how many moved.
+ *
+ * Reads derive this already, so nothing on screen waits for the sweep. What it fixes is the
+ * stored rows drifting from what the screens show: the tables outlive the session that wrote
+ * them, and a key still claiming to be ACTIVE months after it lapsed misleads anything that
+ * reads the database without going through the domain. A revoked key is left alone — it was
+ * killed deliberately, and the expiry it never reached is not the interesting fact about it.
+ */
+export function expireStaleApiKeys(now = Date.now()): number {
+  const stale = getDatabase().apiKeys.filter(
+    (key) => effectiveApiKeyStatus(key, now) === 'EXPIRED' && key.status !== 'EXPIRED',
+  );
+  if (stale.length === 0) return 0;
+
+  mutate(() => {
+    const timestamp = nowIso();
+    stale.forEach((key) => {
+      key.status = 'EXPIRED';
+      key.updatedAt = timestamp;
+    });
+  });
+
+  return stale.length;
 }
 
 export interface ApiKeyPrincipal {
