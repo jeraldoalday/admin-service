@@ -41,13 +41,37 @@ export function recordAuditLog(input: RecordAuditLogInput): void {
 interface ParsedFilters {
   action?: string | undefined;
   targetType?: string | undefined;
+  actorId?: string | undefined;
+  search?: string | undefined;
   from?: string | undefined;
   to?: string | undefined;
+}
+
+/**
+ * The text a free-text search runs against: everything the row carries that a reader could
+ * plausibly be looking for, including the metadata, which is where the interesting detail of
+ * an entry usually lives — the email an invite was addressed to, the name a team was renamed
+ * to, the scopes a key was minted with. Searching the rendered JSON rather than walking the
+ * object keeps the search matching what the screen actually shows in the details column.
+ */
+function searchableText(log: AuditLogRecord): string {
+  return [
+    log.action,
+    log.targetType,
+    log.targetId ?? '',
+    log.metadata ? JSON.stringify(log.metadata) : '',
+  ]
+    .join(' ')
+    .toLowerCase();
 }
 
 function matchesFilters(log: AuditLogRecord, filters: ParsedFilters): boolean {
   if (filters.action && log.action !== filters.action) return false;
   if (filters.targetType && log.targetType !== filters.targetType) return false;
+  if (filters.actorId && log.actorId !== filters.actorId) return false;
+
+  const search = filters.search?.toLowerCase();
+  if (search && !searchableText(log).includes(search)) return false;
 
   const at = Date.parse(log.createdAt);
   if (filters.from && at < startOfBoundary(filters.from)) return false;
@@ -80,4 +104,31 @@ export function listAuditActions(): string[] {
 
 export function listAuditTargetTypes(): string[] {
   return [...new Set(getDatabase().auditLogs.map((log) => log.targetType))].sort();
+}
+
+export interface AuditActorOption {
+  id: string;
+  /** The account's name and email, or the bare id once the account itself is gone. */
+  label: string;
+}
+
+/**
+ * The accounts that appear in the log, for populating the actor filter.
+ *
+ * The label is resolved against the users table on read rather than stored on the entry: an
+ * audit row is append-only and must not be rewritten when somebody changes their display
+ * name, but a filter listing ids nobody recognises is not a filter anyone can use. An actor
+ * whose account has since been deleted keeps its id as the label, since the entries it wrote
+ * are still there and still worth reaching.
+ */
+export function listAuditActors(): AuditActorOption[] {
+  const db = getDatabase();
+  const ids = [...new Set(db.auditLogs.flatMap((log) => (log.actorId ? [log.actorId] : [])))];
+
+  return ids
+    .map((id) => {
+      const user = db.users.find((candidate) => candidate.id === id);
+      return { id, label: user ? `${user.displayName} (${user.email})` : id };
+    })
+    .sort((a, b) => a.label.localeCompare(b.label));
 }

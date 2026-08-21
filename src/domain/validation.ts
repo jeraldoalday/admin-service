@@ -171,6 +171,8 @@ export function endOfBoundary(value: string): number {
 const auditFilterFields = {
   action: z.string().trim().min(1).max(100).optional(),
   targetType: z.string().trim().min(1).max(100).optional(),
+  actorId: z.string().trim().min(1).max(100).optional(),
+  search: z.string().trim().min(1).max(200).optional(),
   from: dateBoundary.optional(),
   to: dateBoundary.optional(),
 };
