@@ -17,10 +17,12 @@ export type {
   LoginInput,
   RegisterInput,
   SetMemberPermissionsInput,
+  SortDirection,
   UpdateProfileInput,
   UpdateTeamInput,
   UpdateUserInput,
   UserFilters,
+  UserSortField,
 } from './validation';
 export * from './errors';
 export * from './pagination';
