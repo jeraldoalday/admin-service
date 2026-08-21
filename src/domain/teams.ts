@@ -537,7 +537,21 @@ export function revokeInvite(actor: Actor, teamId: string, inviteId: string): vo
   if (!invite || invite.teamId !== teamId) {
     throw new NotFoundError('Invite not found');
   }
-  if (invite.status !== 'PENDING') {
+
+  // The derived status, not the stored one: a row that aged out still reads PENDING until
+  // something settles it, and revoking it would have overwritten a true EXPIRED with a
+  // REVOKED that never happened — a rewrite of history rather than a record of it. As on
+  // acceptance, the row is settled on the way past so the next reader sees the truth.
+  const status = effectiveInviteStatus(invite);
+  if (status === 'EXPIRED') {
+    if (invite.status === 'PENDING') {
+      mutate(() => {
+        invite.status = 'EXPIRED';
+      });
+    }
+    throw new BadRequestError('This invite has already expired');
+  }
+  if (status !== 'PENDING') {
     throw new BadRequestError('Only pending invites can be revoked');
   }
 
