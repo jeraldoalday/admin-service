@@ -93,6 +93,7 @@ export function setMemberPermissionGrants(
     action: 'team.member.permissions_updated',
     targetType: 'team_membership',
     targetId: `${teamId}:${userId}`,
+    teamId,
     metadata: { permissions: unique },
   });
 

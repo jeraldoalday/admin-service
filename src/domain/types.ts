@@ -109,6 +109,13 @@ export interface AuditLogRecord {
   action: string;
   targetType: string;
   targetId: string | null;
+  /**
+   * The team an entry belongs to, or null for a platform-level one. Stamped at write time
+   * rather than inferred on read: a membership id can be taken apart to find its team, but an
+   * invite or an API key cannot once the row it named has been deleted, and an audit trail
+   * that loses track of which team an action belonged to is not much of a trail.
+   */
+  teamId: string | null;
   metadata: Record<string, unknown> | null;
   createdAt: string;
 }
@@ -187,6 +194,7 @@ export interface AuditLogView {
   action: string;
   targetType: string;
   targetId: string | null;
+  teamId: string | null;
   metadata: Record<string, unknown> | null;
   createdAt: string;
 }

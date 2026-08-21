@@ -24,7 +24,13 @@ export interface Database {
   auditLogs: AuditLogRecord[];
 }
 
-export const SCHEMA_VERSION = 1;
+/**
+ * Bumped to 2 when audit entries gained the team they belong to. Stored databases are
+ * discarded rather than migrated on a version change, which for a demo console holding
+ * seeded data is the honest trade: a half-migrated audit trail would be worse than a fresh
+ * one.
+ */
+export const SCHEMA_VERSION = 2;
 export const STORAGE_KEY = 'admin-service:db';
 
 export function emptyDatabase(): Database {

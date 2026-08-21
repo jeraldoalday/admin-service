@@ -17,6 +17,8 @@ export interface RecordAuditLogInput {
   action: string;
   targetType: string;
   targetId?: string | null;
+  /** The team the action happened inside, when it happened inside one. */
+  teamId?: string | null;
   metadata?: Record<string, unknown>;
 }
 
@@ -32,6 +34,7 @@ export function recordAuditLog(input: RecordAuditLogInput): void {
       action: input.action,
       targetType: input.targetType,
       targetId: input.targetId ?? null,
+      teamId: input.teamId ?? null,
       metadata: input.metadata ?? null,
       createdAt: nowIso(),
     });

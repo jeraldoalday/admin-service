@@ -123,6 +123,7 @@ export function createApiKey(
     action: 'api_key.created',
     targetType: 'api_key',
     targetId: created.id,
+    teamId,
     metadata: { name: created.name, permissions: created.permissions },
   });
 
@@ -176,6 +177,7 @@ export function revokeApiKey(actor: Actor, teamId: string, keyId: string): ApiKe
     action: 'api_key.revoked',
     targetType: 'api_key',
     targetId: keyId,
+    teamId,
   });
 
   return updated;
@@ -235,6 +237,7 @@ export function rotateApiKey(
     action: 'api_key.rotated',
     targetType: 'api_key',
     targetId: issued.id,
+    teamId,
     metadata: { rotatedFrom: keyId },
   });
 
