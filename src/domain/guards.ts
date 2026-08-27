@@ -16,6 +16,13 @@ import {
 export interface Actor {
   id: string;
   role: 'ADMIN' | 'MEMBER';
+  /**
+   * The session the caller is acting through, when they are acting through one. It is
+   * optional because most of the domain neither knows nor cares — but "sign out my other
+   * devices" and "keep this device signed in after a password change" both have to know
+   * which session *this* one is, and asking the caller is the only honest answer.
+   */
+  sessionId?: string;
 }
 
 export function requireActor(actor: Actor | null | undefined): Actor {

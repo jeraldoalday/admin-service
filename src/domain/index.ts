@@ -54,4 +54,5 @@ export * as permissions from './permissions';
 export * as apiKeys from './apiKeys';
 export * as audit from './audit';
 export * as lockout from './lockout';
+export * as sessions from './sessions';
 export * as service from './service';
