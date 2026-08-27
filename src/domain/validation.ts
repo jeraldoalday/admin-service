@@ -74,6 +74,9 @@ export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 const userFilterFields = {
   role: userRoleEnum.optional(),
   isActive: z.boolean().optional(),
+  // Locked is a state an account is in rather than a flag it carries, so it filters like one
+  // — the question "who cannot currently sign in?" is asked of the list, not of the row.
+  isLocked: z.boolean().optional(),
   search: z.string().trim().min(1).max(200).optional(),
 };
 

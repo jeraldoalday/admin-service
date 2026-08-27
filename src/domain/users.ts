@@ -3,7 +3,9 @@ import { getDatabase, mutate } from './database';
 import { BadRequestError, NotFoundError } from './errors';
 import { requireAdmin, type Actor } from './guards';
 import { nowIso } from './ids';
+import { lockStateFor } from './lockout';
 import { paginate, sortNewestFirst, type PaginatedResult } from './pagination';
+import { deleteSessionsForUser, revokeSessionsForUser } from './sessions';
 import { reassignTeamsOwnedSolelyBy } from './teams';
 import type { AdminUserView, UserRecord } from './types';
 import {
@@ -20,12 +22,25 @@ import {
 
 function toAdminUserView(user: UserRecord): AdminUserView {
   const { id, email, displayName, role, isActive, createdAt, updatedAt } = user;
-  return { id, email, displayName, role, isActive, createdAt, updatedAt };
+  const lock = lockStateFor(email);
+
+  return {
+    id,
+    email,
+    displayName,
+    role,
+    isActive,
+    isLocked: lock.isLocked,
+    lockedUntil: lock.lockedUntil,
+    createdAt,
+    updatedAt,
+  };
 }
 
 interface ParsedFilters {
   role?: 'ADMIN' | 'MEMBER' | undefined;
   isActive?: boolean | undefined;
+  isLocked?: boolean | undefined;
   search?: string | undefined;
   sort: UserSortField;
   direction: SortDirection;
@@ -68,6 +83,9 @@ function sortUsers(
 function matchesFilters(user: UserRecord, filters: ParsedFilters): boolean {
   if (filters.role && user.role !== filters.role) return false;
   if (filters.isActive !== undefined && user.isActive !== filters.isActive) return false;
+  if (filters.isLocked !== undefined && lockStateFor(user.email).isLocked !== filters.isLocked) {
+    return false;
+  }
 
   const search = filters.search?.toLowerCase();
   if (
@@ -138,12 +156,18 @@ export function updateUser(actor: Actor, id: string, rawInput: UpdateUserInput):
     return toAdminUserView(existing);
   });
 
+  // Deactivating an account has to reach the sessions it already has open. A screen reading
+  // through the session provider notices on its next render, but the record is what outlives
+  // the render, and an account nobody may sign in to should not be one anybody is still
+  // signed in as.
+  const revokedSessions = input.isActive === false ? revokeSessionsForUser(admin.id, id) : 0;
+
   recordAuditLog({
     actorId: admin.id,
     action: 'user.updated',
     targetType: 'user',
     targetId: id,
-    metadata: input,
+    metadata: { ...input, ...(revokedSessions > 0 ? { revokedSessions } : {}) },
   });
 
   return updated;
@@ -155,7 +179,8 @@ export function updateUser(actor: Actor, id: string, rawInput: UpdateUserInput):
  * rather than a user id and are deliberately left alone, exactly as before.
  *
  * Any team the account was the only owner of is handed to the member left longest behind
- * first, so the deletion cannot strand a team with nobody able to administer it.
+ * first, so the deletion cannot strand a team with nobody able to administer it, and the
+ * account's sessions go with it.
  */
 export function deleteUser(actor: Actor, id: string): void {
   const admin = requireAdmin(actor);
@@ -172,6 +197,13 @@ export function deleteUser(actor: Actor, id: string): void {
     db.memberships = db.memberships.filter((membership) => membership.userId !== id);
     db.permissionGrants = db.permissionGrants.filter((grant) => grant.userId !== id);
   });
+
+  // The sessions go with the account rather than being marked revoked: there is no longer an
+  // account for them to be sessions of, and a revoked session pointing at a user id nobody
+  // holds is a row that can only ever confuse whoever reads it next. The sign-in attempts
+  // stay — they are addressed to an email, and a run of failures against an address is worth
+  // keeping precisely when the account behind it has just been removed.
+  deleteSessionsForUser(id);
 
   recordAuditLog({
     actorId: admin.id,

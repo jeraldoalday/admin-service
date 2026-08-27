@@ -192,9 +192,17 @@ export interface PublicUser {
   createdAt: string;
 }
 
-/** Admin-facing projection, which additionally exposes account status. */
+/**
+ * Admin-facing projection, which additionally exposes account status.
+ *
+ * The lock is derived from the sign-in attempt table as the row is read, in the same spirit
+ * as an invite's or an API key's expiry: nothing rewrites the account when it locks, and
+ * nothing has to rewrite it again when the lock lapses on its own.
+ */
 export interface AdminUserView extends PublicUser {
   isActive: boolean;
+  isLocked: boolean;
+  lockedUntil: string | null;
   updatedAt: string;
 }
 
