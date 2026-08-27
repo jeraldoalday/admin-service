@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { AppError, auth, emptyDatabase, getDatabase, replaceDatabase, users } from '@/domain';
+import {
+  AppError,
+  audit,
+  auth,
+  emptyDatabase,
+  getDatabase,
+  replaceDatabase,
+  users,
+} from '@/domain';
 import { DEMO_PASSWORD, adminActor } from '../helpers';
 
 describe('registration', () => {
@@ -13,6 +21,22 @@ describe('registration', () => {
     expect(user.email).toBe('new.person@example.com');
     expect(user).not.toHaveProperty('passwordHash');
     expect(user.role).toBe('MEMBER');
+  });
+
+  it('writes the new account into the audit log', () => {
+    const created = auth.registerUser({
+      email: 'logged@example.com',
+      password: 'a-good-password',
+      displayName: 'Logged Person',
+    });
+
+    const entry = audit
+      .listAllAuditLogs({ action: 'user.registered' })
+      .find((log) => log.targetId === created.id);
+
+    expect(entry).toBeDefined();
+    expect(entry?.actorId).toBe(created.id);
+    expect(entry?.metadata).toMatchObject({ email: 'logged@example.com', role: 'MEMBER' });
   });
 
   it('rejects a duplicate email with a conflict', () => {

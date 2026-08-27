@@ -42,7 +42,7 @@ export function registerUser(input: RegisterInput): PublicUser {
     throw new ConflictError('An account with this email already exists');
   }
 
-  return mutate((db) => {
+  const created = mutate((db) => {
     const timestamp = nowIso();
     const user: UserRecord = {
       id: createId(),
@@ -57,6 +57,22 @@ export function registerUser(input: RegisterInput): PublicUser {
     db.users.push(user);
     return toPublicUser(user);
   });
+
+  // Registration is a mutation like any other, and the one that brings an account into
+  // existence at that. Leaving it out made the log's own claim to be a complete record
+  // false: an account could appear on the users screen with nothing in the trail saying
+  // where it came from, and the first admin — the account that can read the trail — was
+  // itself the least accounted-for row in it. The account is its own actor, which is the
+  // truth of a self-service registration.
+  recordAuditLog({
+    actorId: created.id,
+    action: 'user.registered',
+    targetType: 'user',
+    targetId: created.id,
+    metadata: { email: created.email, role: created.role },
+  });
+
+  return created;
 }
 
 export function loginUser(input: LoginInput): PublicUser {
