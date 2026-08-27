@@ -2,7 +2,7 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useSession } from '@/app/sessionContext';
 import { ErrorNotice, Field } from '@/components/ui';
-import { DEMO_ADMIN_EMAIL, DEMO_PASSWORD, toErrorMessage } from '@/domain';
+import { DEMO_ADMIN_EMAIL, DEMO_PASSWORD, lockout, toErrorMessage } from '@/domain';
 
 type Mode = 'signin' | 'register';
 
@@ -15,26 +15,47 @@ export function SignInPage(): ReactNode {
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
   if (user) {
     const from = (location.state as { from?: string } | null)?.from;
     return <Navigate to={from ?? '/'} replace />;
   }
 
+  /**
+   * Counts down the attempts left before the address locks.
+   *
+   * It is safe to say out loud, because the throttle treats an address nobody has registered
+   * exactly like one that exists — so the count says how many guesses remain and nothing at
+   * all about whether there is an account behind them. What it buys is that somebody who has
+   * simply mistyped their password twice finds out before the lock rather than after it.
+   */
+  function warnAboutRemainingAttempts(address: string): void {
+    const lock = lockout.lockStateFor(address);
+    setWarning(
+      lock.isLocked || lock.failedAttempts === 0
+        ? null
+        : `${lock.retriesRemaining} more failed ${lock.retriesRemaining === 1 ? 'attempt' : 'attempts'} will lock this address for 15 minutes.`,
+    );
+  }
+
   function handleSubmit(event: FormEvent): void {
     event.preventDefault();
     setError(null);
+    setWarning(null);
     try {
       if (mode === 'signin') signIn(email, password);
       else register(email, password, displayName);
     } catch (caught) {
       setError(toErrorMessage(caught));
+      if (mode === 'signin') warnAboutRemainingAttempts(email);
     }
   }
 
   function switchTo(next: Mode): void {
     setMode(next);
     setError(null);
+    setWarning(null);
   }
 
   return (
@@ -81,6 +102,11 @@ export function SignInPage(): ReactNode {
           </Field>
 
           <ErrorNotice error={error} />
+          {warning && (
+            <p className="notice notice--warning" role="status">
+              {warning}
+            </p>
+          )}
 
           <button type="submit" className="button button--primary button--block">
             {mode === 'signin' ? 'Sign in' : 'Create account'}
