@@ -16,6 +16,7 @@ describe('bootstrapDatabase', () => {
       seeded: true,
       expiredInvites: 0,
       expiredApiKeys: 0,
+      expiredSessions: 0,
     });
     expect(getDatabase().users).toHaveLength(5);
     expect(getDatabase().teams.map((team) => team.slug)).toEqual(['platform', 'growth']);
@@ -31,6 +32,7 @@ describe('bootstrapDatabase', () => {
       seeded: false,
       expiredInvites: 0,
       expiredApiKeys: 0,
+      expiredSessions: 0,
     });
     expect(getDatabase().teams).toHaveLength(0);
   });
@@ -42,12 +44,18 @@ describe('bootstrapDatabase', () => {
       seeded: true,
       expiredInvites: 0,
       expiredApiKeys: 0,
+      expiredSessions: 0,
     });
     expect(getDatabase().users).toHaveLength(5);
   });
 
   it('runs without any storage at all', () => {
-    expect(bootstrapDatabase(null)).toEqual({ seeded: true, expiredInvites: 0, expiredApiKeys: 0 });
+    expect(bootstrapDatabase(null)).toEqual({
+      seeded: true,
+      expiredInvites: 0,
+      expiredApiKeys: 0,
+      expiredSessions: 0,
+    });
     expect(getDatabase().users).toHaveLength(5);
   });
 
@@ -62,6 +70,7 @@ describe('bootstrapDatabase', () => {
       seeded: false,
       expiredInvites: 1,
       expiredApiKeys: 0,
+      expiredSessions: 0,
     });
     expect(getDatabase().invites[0]?.status).toBe('EXPIRED');
   });
