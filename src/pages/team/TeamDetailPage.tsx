@@ -97,6 +97,7 @@ export function TeamDetailPage(): ReactNode {
             teamId={teamId}
             canManageMembers={can('MANAGE_MEMBERS')}
             canManagePermissions={can('MANAGE_PERMISSIONS')}
+            canManageOwnership={team.data.role === 'OWNER'}
           />
         )}
         {activeTab === 'Invites' && <InvitesTab teamId={teamId} />}

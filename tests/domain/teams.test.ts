@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { audit, getDatabase, teams } from '@/domain';
-import { adminActor, createUser, danaActor, miraActor, rajActor, teamIdBySlug } from '../helpers';
+import {
+  adminActor,
+  createUser,
+  danaActor,
+  grant,
+  miraActor,
+  rajActor,
+  teamIdBySlug,
+} from '../helpers';
 
 describe('creating a team', () => {
   it('makes the creator its owner', () => {
@@ -54,6 +62,37 @@ describe('member roles', () => {
     const platform = teamIdBySlug('platform');
     expect(() => teams.updateMemberRole(rajActor(), platform, adminActor().id, 'MEMBER')).toThrow(
       'You do not have permission to perform this action',
+    );
+  });
+
+  it('refuses to hand out ownership to anyone but an owner', () => {
+    const admin = adminActor();
+    const platform = teamIdBySlug('platform');
+    const raj = rajActor();
+
+    // Raj is a plain member who has been granted the roster permission. That is enough to
+    // change roles, and must not be enough to decide who the team belongs to.
+    grant(admin, platform, raj.id, ['MANAGE_MEMBERS']);
+
+    expect(() => teams.updateMemberRole(raj, platform, raj.id, 'OWNER')).toThrow(
+      'Only an owner can make someone else an owner',
+    );
+    expect(() => teams.updateMemberRole(raj, platform, danaActor().id, 'OWNER')).toThrow(
+      'Only an owner can make someone else an owner',
+    );
+    expect(
+      teams.listTeamMembers(admin, platform).items.filter((m) => m.role === 'OWNER'),
+    ).toHaveLength(1);
+  });
+
+  it('lets a team admin manage the roster without touching ownership', () => {
+    const dana = danaActor();
+    const platform = teamIdBySlug('platform');
+
+    // Dana is an ADMIN on Platform: promoting a member to ADMIN is hers to do.
+    expect(teams.updateMemberRole(dana, platform, rajActor().id, 'ADMIN').role).toBe('ADMIN');
+    expect(() => teams.updateMemberRole(dana, platform, dana.id, 'OWNER')).toThrow(
+      'Only an owner can make someone else an owner',
     );
   });
 

@@ -358,12 +358,21 @@ export function updateMemberRole(
   rawRole: TeamRole,
 ): TeamMemberView {
   const current = requireActor(actor);
-  requireTeamPermission(actor, teamId, 'MANAGE_MEMBERS');
+  const callerMembership = requireTeamPermission(actor, teamId, 'MANAGE_MEMBERS');
   const { role } = parseInput(updateMemberRoleSchema, { role: rawRole });
 
   const membership = findMembership(teamId, targetUserId);
   if (!membership) {
     throw new NotFoundError('Team member not found');
+  }
+
+  // Ownership may only be handed out by an owner. MANAGE_MEMBERS is a grantable permission,
+  // so without this check a plain member holding it could promote themselves — or anyone
+  // else — to OWNER, and OWNER is the one role the grantable set deliberately does not
+  // cover: team deletion is a hardcoded owner-only action. Being allowed to administer a
+  // roster is not the same as being allowed to decide who the team belongs to.
+  if (role === 'OWNER' && callerMembership.role !== 'OWNER') {
+    throw new ForbiddenError('Only an owner can make someone else an owner');
   }
 
   if (membership.role === 'OWNER' && role !== 'OWNER' && countOwners(teamId) <= 1) {

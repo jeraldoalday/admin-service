@@ -19,10 +19,13 @@ export function MembersTab({
   teamId,
   canManageMembers,
   canManagePermissions,
+  canManageOwnership,
 }: {
   teamId: string;
   canManageMembers: boolean;
   canManagePermissions: boolean;
+  /** Only an owner may hand out ownership, which the domain enforces independently. */
+  canManageOwnership: boolean;
 }): ReactNode {
   const actor = useActor();
   const [page, setPage] = useState(1);
@@ -73,7 +76,14 @@ export function MembersTab({
                     value={member.role}
                     onChange={(event) => changeRole(member.userId, event.target.value as TeamRole)}
                   >
-                    <option value="OWNER">OWNER</option>
+                    {/*
+                      Offered only to an owner. A member who runs the roster can still see
+                      that an owner exists — the option they cannot use is simply not on the
+                      menu, rather than there to be picked and refused.
+                    */}
+                    {(canManageOwnership || member.role === 'OWNER') && (
+                      <option value="OWNER">OWNER</option>
+                    )}
                     <option value="ADMIN">ADMIN</option>
                     <option value="MEMBER">MEMBER</option>
                   </select>
