@@ -13,6 +13,8 @@ export type {
   ListApiKeysQuery,
   ListAuditLogsQuery,
   ListInvitesQuery,
+  ListSessionsQuery,
+  ListSignInAttemptsQuery,
   ListUsersQuery,
   LoginInput,
   RegisterInput,

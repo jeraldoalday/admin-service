@@ -17,6 +17,8 @@ export const userRoleEnum = z.enum(['ADMIN', 'MEMBER']);
 export const teamRoleEnum = z.enum(['OWNER', 'ADMIN', 'MEMBER']);
 export const inviteStatusEnum = z.enum(['PENDING', 'ACCEPTED', 'REVOKED', 'EXPIRED']);
 export const apiKeyStatusEnum = z.enum(['ACTIVE', 'REVOKED', 'EXPIRED']);
+export const sessionStatusEnum = z.enum(['ACTIVE', 'REVOKED', 'EXPIRED']);
+export const signInOutcomeEnum = z.enum(['SUCCEEDED', 'FAILED', 'BLOCKED']);
 export const teamPermissionEnum = z.enum([
   'MANAGE_TEAM',
   'MANAGE_MEMBERS',
@@ -163,6 +165,40 @@ export const listApiKeysQuerySchema = paginationSchema.extend({
   status: apiKeyStatusEnum.optional(),
 });
 export type ListApiKeysQuery = z.input<typeof listApiKeysQuerySchema>;
+
+// -- sessions and sign-in history ------------------------------------------
+
+/**
+ * What a session calls itself. The browser supplies it, so it is untrusted text that will be
+ * rendered next to a Revoke button: it is trimmed, capped, and stripped of the control
+ * characters that would otherwise let a label rearrange the line it sits on. An empty or
+ * missing one becomes a neutral placeholder rather than a blank row, because a session with
+ * no name at all is still a session somebody may need to end.
+ */
+export const UNKNOWN_SESSION_LABEL = 'Unknown device';
+
+export const sessionLabelSchema = z
+  .string()
+  .catch(UNKNOWN_SESSION_LABEL)
+  .default(UNKNOWN_SESSION_LABEL)
+  .transform((value) => {
+    const cleaned = value
+      .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+      .trim()
+      .slice(0, 200);
+    return cleaned === '' ? UNKNOWN_SESSION_LABEL : cleaned;
+  });
+
+export const listSessionsQuerySchema = paginationSchema.extend({
+  status: sessionStatusEnum.optional(),
+});
+export type ListSessionsQuery = z.input<typeof listSessionsQuerySchema>;
+
+export const listSignInAttemptsQuerySchema = paginationSchema.extend({
+  outcome: signInOutcomeEnum.optional(),
+  email: z.string().trim().toLowerCase().min(1).max(200).optional(),
+});
+export type ListSignInAttemptsQuery = z.input<typeof listSignInAttemptsQuerySchema>;
 
 // -- audit logs ------------------------------------------------------------
 
