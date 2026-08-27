@@ -3,6 +3,8 @@ import type { Actor, PublicUser } from '@/domain';
 
 export interface SessionContextValue {
   user: PublicUser | null;
+  /** The session this browser is holding, or null when it is signed out. */
+  sessionId: string | null;
   actor: Actor | null;
   signIn: (email: string, password: string) => PublicUser;
   register: (email: string, password: string, displayName: string) => PublicUser;
