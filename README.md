@@ -25,7 +25,8 @@ npm run dev     # http://localhost:5173
 ```
 
 Demo data is seeded on first run. Sign in as `admin@example.com` — every seeded account
-shares the password `password123`. Everything you do persists to the browser; **Reset demo
+shares the password `password123`, and none of them arrives locked — an account that did
+would be one nobody could explore for the first quarter of an hour. Everything you do persists to the browser; **Reset demo
 data** in the sidebar puts it back to the seeded dataset and signs you out.
 
 ## Scripts
@@ -49,11 +50,11 @@ data** in the sidebar puts it back to the seeded dataset and signs you out.
 | ----------------- | -------------- | ---------------------------------------------------------------------- |
 | `/sign-in`        | public         | Sign in or register; the first account ever created becomes an admin   |
 | `/`               | signed in      | Overview — your teams, and for admins the platform totals and activity |
-| `/account`        | signed in      | Your own display name and password                                     |
+| `/account`        | signed in      | Your name, your password, and the devices signed in as you             |
 | `/teams`          | signed in      | Teams you belong to, and the form that creates one                     |
 | `/teams/:teamId`  | member         | One team: members, invites, API keys, activity, and settings           |
 | `/invites/:token` | signed in      | Accept an invite addressed to your account's email                     |
-| `/users`          | platform admin | Every account: search, filter, sort, edit, delete                      |
+| `/users`          | platform admin | Every account: search, filter, sort, edit, unlock, delete              |
 | `/audit-logs`     | platform admin | Append-only history of every mutation, filterable by actor and text    |
 
 Team screens only render the sections the caller's permissions cover, and the domain layer
@@ -78,10 +79,42 @@ stay where they belong — on the admin screens, as somebody else's decision. De
 account hands over any team it was the sole owner of before it goes, since the rules that
 protect a last owner would otherwise leave that team unreachable.
 
+**Sign-in** is throttled and remembered. Five failed attempts inside a quarter of an hour
+close an address off, and the refusal is its own error type so the form can say "wait" rather
+than "that password is wrong" — telling somebody their correct password is wrong is how a
+throttle gets mistaken for a broken account. An address nobody has registered locks exactly
+like one that exists, since the form refuses to say which it is looking at and a throttle that
+spared unknown addresses would say it on the form's behalf. The lock is derived from the
+attempt rows rather than stored as a flag, as an invite's and an API key's expiry are, and
+there is deliberately no separate lockout duration: the lock simply _is_ "five failures are
+currently in the window", so it opens again as the fifth-newest of them ages out and there is
+no second answer to drift from the first. A blocked attempt is recorded but does not count, so
+nobody extends their own lockout by continuing to knock, and a deactivated account does not
+come back from deactivation locked as well. An admin can open an account early from the users
+screen; the cleared failures stay in the table with a timestamp rather than being deleted,
+since an unlock that erased the run of failures behind it would leave the next reader unable
+to tell a quiet week from a busy one somebody tidied up after.
+
+**Sessions** are what the browser actually holds. It keeps an opaque session id, and whether
+that id still opens anything — the expiry, whether it has been revoked, whether the account
+behind it still exists and is still active — is read from the store on every render, so a
+session revoked from another device takes effect on the next one rather than at some later
+token expiry. Each session carries the name of the browser that opened it, worked out from the
+user-agent string, because the point is recognition rather than forensics: somebody scanning
+the list is looking for the entry that is not theirs. `/account` shows every session ever
+opened against the account, ended ones included — a list of only the live ones answers "who is
+signed in?" but not "was anybody signed in that I did not recognise?" — and offers both a
+per-device revoke and "sign out other devices", which spares the device asking. Changing a
+password ends every other session, since somebody changing a password is usually doing it
+because they believe somebody else has it. Deactivating an account revokes its sessions and
+deleting one takes them with it, and a sweep at boot settles the ones that expired while the
+console was closed.
+
 **Teams** are a self-service multi-tenancy layer, independent of the platform `role`: any
 signed-in user can create a team and becomes its `OWNER`. Team roles (`OWNER`/`ADMIN`/`MEMBER`)
 only mean something inside that team. A team always needs at least one owner — the last one
-cannot be demoted, removed, or leave. Invites are single-use tokens tied to an email address,
+cannot be demoted, removed, or leave — and only an owner can make somebody else one, since
+ownership is the part of a team that the grantable permissions deliberately do not cover. Invites are single-use tokens tied to an email address,
 expire after seven days, and can only be accepted while signed in as the address they name.
 There is no mail transport, so a pending invite's link stays retrievable from the invites tab
 for as long as it is valid; accepted, revoked, and expired invites offer none, because their
@@ -111,7 +144,9 @@ than merely documented.
 
 **The audit log** is append-only, written by the domain layer rather than by the screens, which
 is what makes it a complete record instead of a sample. Every user, team, membership, invite,
-permission, and API key mutation lands in it. It filters by action, by target type, by actor,
+permission, session, and API key mutation lands in it — registration included, since the
+account that brings itself into existence is exactly the one a reader should not have to take
+on trust. It filters by action, by target type, by actor,
 by free text over the action, target, and metadata, and by date range, where a bare calendar
 date names the whole day it stands for rather than the instant it begins. An actor is shown by
 the account's current name and email, resolved as the log is read — the entry itself is never
@@ -150,22 +185,27 @@ src/
     store.ts             Subscribes screens to the store's revision counter
   components/            Layout, table, and form primitives
   pages/                 One module per screen; team/ holds the team tabs
-    AccountPage.tsx      Self-service name and password
+    AccountPage.tsx      Self-service name, password, and security
+    account/             The signed-in devices and sign-in history cards
     team/ActivityTab.tsx One team's slice of the audit log
   lib/
     format.ts            Date and permission formatting
     csv.ts               RFC 4180 serialisation for exports
+    device.ts            A readable name for the browser a session was opened from
   domain/
     types.ts             Entities, roles, permissions, role defaults
     database.ts          The tables, persistence, and change notification
     guards.ts            Actor, admin, membership, and permission checks
     auth.ts users.ts teams.ts permissions.ts apiKeys.ts audit.ts
+    sessions.ts          Signed-in sessions: opening, resolving, revoking, sweeping
+    lockout.ts           Sign-in attempts and the throttle derived from them
     service.ts           The machine-facing, API-key-authenticated surface
     seed.ts              Demo dataset
     sha256.ts            Synchronous digest for API key lookup
     validation.ts        zod schemas shared by forms and domain functions
 tests/
   domain/                Rules, guards, persistence, and boot
+  lib/                   The pure helpers, checked against real inputs
   ui/                    Whole-app tests driving the real screens
 ```
 
@@ -182,7 +222,7 @@ drive it the way a person would; nothing is mocked. The SHA-256 implementation i
 against `node:crypto` directly, since API key lookup depends on the two agreeing.
 
 `npm run test:coverage` reports on the domain and app layers and fails below its thresholds —
-currently around 97.5% of statements and 91.7% of branches, with the thresholds set just under
+currently around 97.7% of statements and 92.2% of branches, with the thresholds set just under
 that so a real regression trips them and an ordinary refactor does not. `npm run check` runs
 lint, formatting, types, and that covered suite in one pass, which is exactly what CI runs.
 The screens are covered through the whole-app tests rather than by chasing a number.
