@@ -1,8 +1,9 @@
 import { recordAuditLog } from './audit';
 import { getDatabase, mutate } from './database';
-import { ConflictError, UnauthorizedError } from './errors';
+import { ConflictError, TooManyRequestsError, UnauthorizedError } from './errors';
 import { requireActor, type Actor } from './guards';
 import { createId, nowIso } from './ids';
+import { lockStateFor, recordSignInAttempt } from './lockout';
 import { hashPassword, verifyPassword } from './password';
 import type { PublicUser, UserRecord } from './types';
 import {
@@ -75,20 +76,40 @@ export function registerUser(input: RegisterInput): PublicUser {
   return created;
 }
 
+/**
+ * Weighs a set of credentials, and writes down that it did.
+ *
+ * Every path out of here records an attempt, which is what gives the throttle something to
+ * count and the account holder something to read. The lock is checked before the password
+ * is, so a locked address costs nothing to refuse and the refusal cannot be timed against a
+ * successful verification to learn whether the password was right.
+ */
 export function loginUser(input: LoginInput): PublicUser {
   const parsed = parseInput(loginSchema, input);
   const user = findUserByEmail(parsed.email);
+  const attempt = { email: parsed.email, userId: user?.id ?? null };
+
+  const lock = lockStateFor(parsed.email);
+  if (lock.isLocked) {
+    recordSignInAttempt({ ...attempt, outcome: 'BLOCKED' });
+    throw new TooManyRequestsError('Too many failed sign-in attempts. Try again in a few minutes.');
+  }
 
   // Same message whether the account is missing or the password is wrong, so the form
   // cannot be used to enumerate which emails have accounts.
   if (!user || !verifyPassword(parsed.password, user.passwordHash)) {
+    recordSignInAttempt({ ...attempt, outcome: 'FAILED' });
     throw new UnauthorizedError('Invalid email or password');
   }
 
   if (!user.isActive) {
+    // Recorded as BLOCKED rather than FAILED: the password was right, and counting this
+    // would leave a deactivated account locked as well by the time anyone reactivated it.
+    recordSignInAttempt({ ...attempt, outcome: 'BLOCKED' });
     throw new UnauthorizedError('This account has been deactivated');
   }
 
+  recordSignInAttempt({ ...attempt, outcome: 'SUCCEEDED' });
   return toPublicUser(user);
 }
 

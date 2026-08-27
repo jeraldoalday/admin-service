@@ -104,11 +104,17 @@ export interface ApiKeyRecord {
 }
 
 /**
- * How a sign-in ended. FAILED covers a wrong password and an email nobody has an account
- * for alike — the two are the same event from the form's point of view, and recording them
- * differently would turn the attempt log into the account enumeration oracle the sign-in
- * form itself refuses to be. BLOCKED is an attempt refused by the lockout without the
- * password being weighed at all.
+ * How a sign-in ended.
+ *
+ * FAILED covers a wrong password and an email nobody has an account for alike — the two are
+ * the same event from the form's point of view, and recording them differently would turn
+ * the attempt log into the account enumeration oracle the sign-in form itself refuses to be.
+ *
+ * BLOCKED is an attempt the credentials never got to decide: one refused by the lockout, or
+ * one whose password was right but whose account has been deactivated. Keeping those out of
+ * FAILED is what stops them counting towards a lock — a deactivated account should not come
+ * back from deactivation locked as well, and a locked-out address should not be able to
+ * extend its own lockout by continuing to knock.
  */
 export type SignInOutcome = 'SUCCEEDED' | 'FAILED' | 'BLOCKED';
 export const SIGN_IN_OUTCOMES: SignInOutcome[] = ['SUCCEEDED', 'FAILED', 'BLOCKED'];

@@ -47,6 +47,18 @@ export class ConflictError extends AppError {
   }
 }
 
+/**
+ * Refused because it was tried too often, rather than because it was wrong. It is its own
+ * type so the sign-in form can say "wait" instead of "that password is wrong" — telling
+ * somebody their correct password is wrong while they are locked out is how a throttle gets
+ * mistaken for a broken account.
+ */
+export class TooManyRequestsError extends AppError {
+  constructor(message = 'Too many attempts') {
+    super(429, 'TOO_MANY_REQUESTS', message);
+  }
+}
+
 /** Narrows an unknown thrown value to a message suitable for display. */
 export function toErrorMessage(error: unknown): string {
   if (error instanceof AppError) return error.message;
