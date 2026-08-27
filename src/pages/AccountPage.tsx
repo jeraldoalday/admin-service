@@ -5,12 +5,20 @@ import { PageHeader } from '@/components/Layout';
 import { Badge, Card, ErrorNotice, Field, SuccessNotice } from '@/components/ui';
 import { auth, teams, toErrorMessage } from '@/domain';
 import { formatDate } from '@/lib/format';
+import { SessionsCard } from './account/SessionsCard';
+import { SignInActivityCard } from './account/SignInActivityCard';
 
 /**
- * The screen an account manages itself from. Everything here is self-service: renaming and
- * changing a password are the only two writes an account may make to itself, and the domain
- * enforces that independently — the role and the active flag stay on the admin-only users
- * screen, where changing them is somebody else's decision to make.
+ * The screen an account manages itself from. Everything here is self-service: renaming,
+ * changing a password, and ending sessions are the writes an account may make to itself, and
+ * the domain enforces that independently — the role and the active flag stay on the
+ * admin-only users screen, where changing them is somebody else's decision to make.
+ *
+ * The security half of the screen is deliberately the account holder's rather than an
+ * administrator's. A leaked password shows up as failures its owner knows they did not make,
+ * and a stolen session shows up as a device they do not recognise; in both cases the person
+ * best placed to notice is the one whose account it is, and they can act on it here without
+ * having to ask anybody.
  */
 export function AccountPage(): ReactNode {
   const { user } = useSession();
@@ -23,7 +31,7 @@ export function AccountPage(): ReactNode {
     <>
       <PageHeader
         title="Account"
-        description="Your name and password. Everything here applies to your own account only."
+        description="Your name, your password, and the devices signed in as you."
         actions={<Badge tone={user.role === 'ADMIN' ? 'accent' : 'neutral'}>{user.role}</Badge>}
       />
 
@@ -56,6 +64,8 @@ export function AccountPage(): ReactNode {
 
       <ProfileForm displayName={user.displayName} />
       <PasswordForm />
+      <SessionsCard />
+      <SignInActivityCard />
     </>
   );
 }
@@ -130,7 +140,7 @@ function PasswordForm(): ReactNode {
   return (
     <Card
       title="Password"
-      description="Changing it requires the current one, so an open session is not enough on its own."
+      description="Changing it requires the current one, and signs your other devices out."
     >
       <form className="form" onSubmit={handleSubmit}>
         <Field label="Current password">
@@ -162,7 +172,11 @@ function PasswordForm(): ReactNode {
         </Field>
 
         <ErrorNotice error={error} />
-        {changed && <SuccessNotice>Your password has been changed.</SuccessNotice>}
+        {changed && (
+          <SuccessNotice>
+            Your password has been changed, and every other device signed out.
+          </SuccessNotice>
+        )}
 
         <div className="form__actions">
           <button type="submit" className="button button--primary">
