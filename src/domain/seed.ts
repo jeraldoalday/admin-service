@@ -1,8 +1,9 @@
 import { emptyDatabase, replaceDatabase, type Database } from './database';
 import { createId, createToken } from './ids';
 import { hashPassword } from './password';
+import { SESSION_TTL_MS } from './sessions';
 import { INVITE_TTL_MS } from './teams';
-import type { UserRecord } from './types';
+import type { SignInAttemptRecord, UserRecord, UserSessionRecord } from './types';
 
 /** Every seeded account shares this password so the demo is explorable without a handbook. */
 export const DEMO_PASSWORD = 'password123';
@@ -10,12 +11,14 @@ export const DEMO_PASSWORD = 'password123';
 export const DEMO_ADMIN_EMAIL = 'admin@example.com';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const MINUTE_MS = 60 * 1000;
 
 /**
  * Builds the demo dataset: an admin, a handful of members, two teams with overlapping
- * rosters, a granted permission that outruns its holder's role, a pending invite, and an
- * API key. It is written straight into the tables rather than through the domain functions,
- * so seeding cannot trip over the very guards it exists to demonstrate.
+ * rosters, a granted permission that outruns its holder's role, a pending invite, an API
+ * key, a few signed-in devices, and enough sign-in history for the lockout to be visible
+ * without having to be provoked. It is written straight into the tables rather than through
+ * the domain functions, so seeding cannot trip over the very guards it exists to demonstrate.
  */
 export function buildSeedDatabase(now = Date.now()): Database {
   const db = emptyDatabase();
@@ -110,6 +113,74 @@ export function buildSeedDatabase(now = Date.now()): Database {
     createdAt: at(7),
     updatedAt: at(7),
   });
+
+  const minutesAgo = (minutes: number): string => new Date(now - minutes * MINUTE_MS).toISOString();
+
+  const session = (
+    userId: string,
+    label: string,
+    startedDaysAgo: number,
+    lastSeenMinutesAgo: number,
+    revokedDaysAgo: number | null = null,
+  ): UserSessionRecord => ({
+    id: createToken(18),
+    userId,
+    label,
+    expiresAt: new Date(now - startedDaysAgo * DAY_MS + SESSION_TTL_MS).toISOString(),
+    lastSeenAt: minutesAgo(lastSeenMinutesAgo),
+    revokedAt: revokedDaysAgo === null ? null : at(revokedDaysAgo),
+    revokedById: revokedDaysAgo === null ? null : userId,
+    createdAt: at(startedDaysAgo),
+  });
+
+  // Two live devices and one Avery ended by hand — the shape somebody is meant to recognise
+  // on the security panel, where the interesting row is the one you do not remember opening.
+  db.sessions.push(
+    session(admin.id, 'Chrome on macOS', 2, 4),
+    session(admin.id, 'Safari on iOS', 5, 900),
+    session(admin.id, 'Firefox on Windows', 6, 2200, 5),
+    session(dana.id, 'Chrome on macOS', 1, 30),
+  );
+
+  const attempt = (
+    email: string,
+    userId: string | null,
+    outcome: SignInAttemptRecord['outcome'],
+    minutes: number,
+  ): SignInAttemptRecord => ({
+    id: createId(),
+    email,
+    userId,
+    outcome,
+    clearedAt: null,
+    createdAt: minutesAgo(minutes),
+  });
+
+  /**
+   * Enough history for the sign-in panel to say something, and deliberately not enough to
+   * lock any seeded account: every one of them shares the demo password, so an account that
+   * arrived locked would be an account nobody could explore for the first quarter of an hour.
+   * Raj carries three failures — under the threshold, which is exactly the state the
+   * "attempts remaining" line exists to describe.
+   *
+   * The live lockout sits on an address no account holds, which is both harmless and the
+   * pattern the attempt log is really kept for: a run of guesses against an address that was
+   * never going to work says something about whoever is making them.
+   */
+  db.signInAttempts.push(
+    attempt(admin.email, admin.id, 'SUCCEEDED', 2880),
+    attempt(admin.email, admin.id, 'FAILED', 2875),
+    attempt(admin.email, admin.id, 'SUCCEEDED', 2874),
+    attempt(dana.email, dana.id, 'SUCCEEDED', 1440),
+    attempt(sam.email, sam.id, 'BLOCKED', 4300),
+    attempt(raj.email, raj.id, 'FAILED', 9),
+    attempt(raj.email, raj.id, 'FAILED', 7),
+    attempt(raj.email, raj.id, 'FAILED', 6),
+    ...[13, 12, 11, 10, 9].map((minutes) =>
+      attempt('postmaster@example.com', null, 'FAILED', minutes),
+    ),
+    attempt('postmaster@example.com', null, 'BLOCKED', 8),
+  );
 
   db.auditLogs.push(
     {
