@@ -313,7 +313,7 @@ describe('exporting accounts', () => {
     expect(clicks).toHaveBeenCalledOnce();
     expect(await screen.findByRole('status')).toHaveTextContent('Exported 1 account');
     await vi.waitFor(() => expect(documents[0]).toContain('Sam Lee'));
-    expect(documents[0]).toContain('Name,Email,Role,Status,Joined,Updated');
+    expect(documents[0]).toContain('Name,Email,Role,Status,Locked until,Joined,Updated');
     expect(documents[0]).not.toContain('Avery Admin');
   });
 

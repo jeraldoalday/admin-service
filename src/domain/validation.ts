@@ -185,8 +185,10 @@ export const sessionLabelSchema = z
   .catch(UNKNOWN_SESSION_LABEL)
   .default(UNKNOWN_SESSION_LABEL)
   .transform((value) => {
+    // `\p{Cc}` names the control characters rather than spelling them out, which says what
+    // is being removed and keeps a literal NUL out of the source.
     const cleaned = value
-      .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+      .replace(/\p{Cc}+/gu, ' ')
       .trim()
       .slice(0, 200);
     return cleaned === '' ? UNKNOWN_SESSION_LABEL : cleaned;

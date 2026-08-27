@@ -14,6 +14,7 @@ import {
   Toolbar,
 } from '@/components/ui';
 import {
+  lockout,
   toErrorMessage,
   users,
   type AdminUserView,
@@ -24,9 +25,10 @@ import {
   type UserSortField,
 } from '@/domain';
 import { downloadTextFile, toCsv } from '@/lib/csv';
-import { formatDate } from '@/lib/format';
+import { formatDate, formatDateTime } from '@/lib/format';
 
 type ActiveFilter = 'all' | 'true' | 'false';
+type LockFilter = 'all' | 'true' | 'false';
 
 /**
  * The direction a column starts in when it is first clicked. Dates open newest-first, since
@@ -56,6 +58,7 @@ export function UsersPage(): ReactNode {
   const [search, setSearch] = useState('');
   const [role, setRole] = useState<'all' | UserRole>('all');
   const [isActive, setIsActive] = useState<ActiveFilter>('all');
+  const [isLocked, setIsLocked] = useState<LockFilter>('all');
   const [sort, setSort] = useState<UserSortField>('createdAt');
   const [direction, setDirection] = useState<SortDirection>('desc');
   const [editing, setEditing] = useState<AdminUserView | null>(null);
@@ -67,6 +70,7 @@ export function UsersPage(): ReactNode {
     ...(search.trim() ? { search: search.trim() } : {}),
     ...(role === 'all' ? {} : { role }),
     ...(isActive === 'all' ? {} : { isActive: isActive === 'true' }),
+    ...(isLocked === 'all' ? {} : { isLocked: isLocked === 'true' }),
     sort,
     direction,
   };
@@ -113,6 +117,7 @@ export function UsersPage(): ReactNode {
         { header: 'Email', value: (row) => row.email },
         { header: 'Role', value: (row) => row.role },
         { header: 'Status', value: (row) => (row.isActive ? 'Active' : 'Deactivated') },
+        { header: 'Locked until', value: (row) => row.lockedUntil ?? '' },
         { header: 'Joined', value: (row) => row.createdAt },
         { header: 'Updated', value: (row) => row.updatedAt },
       ]);
@@ -121,6 +126,20 @@ export function UsersPage(): ReactNode {
       setExported(matching.length);
     } catch (caught) {
       setExported(null);
+      setError(toErrorMessage(caught));
+    }
+  }
+
+  /**
+   * Opens a locked account back up before its lock lapses on its own. This is the "it was
+   * me, I mistyped it five times" case: without it the account holder loses a quarter of an
+   * hour of work to a mistake everybody involved already understands.
+   */
+  function handleUnlock(id: string): void {
+    setError(null);
+    try {
+      lockout.unlockAccount(actor, id);
+    } catch (caught) {
       setError(toErrorMessage(caught));
     }
   }
@@ -139,7 +158,7 @@ export function UsersPage(): ReactNode {
     <>
       <PageHeader
         title="Users"
-        description="Every account on the platform. Updates and deletions are written to the audit log."
+        description="Every account on the platform. Updates, unlocks, and deletions are written to the audit log."
         actions={
           <button type="button" className="button" onClick={exportMatching}>
             Export CSV
@@ -181,6 +200,18 @@ export function UsersPage(): ReactNode {
               <option value="false">Deactivated</option>
             </select>
           </Field>
+          <Field label="Sign-in">
+            <select
+              value={isLocked}
+              onChange={(event) =>
+                changeFilter(() => setIsLocked(event.target.value as LockFilter))
+              }
+            >
+              <option value="all">Any</option>
+              <option value="true">Locked out</option>
+              <option value="false">Not locked</option>
+            </select>
+          </Field>
         </Toolbar>
 
         <ErrorNotice error={error} />
@@ -206,6 +237,13 @@ export function UsersPage(): ReactNode {
                   <Badge tone={user.isActive ? 'positive' : 'warning'}>
                     {user.isActive ? 'Active' : 'Deactivated'}
                   </Badge>
+                  {user.isLocked && (
+                    <>
+                      {' '}
+                      <Badge tone="danger">Locked</Badge>
+                      <span className="cell--tag">until {formatDateTime(user.lockedUntil)}</span>
+                    </>
+                  )}
                 </td>
                 <td className="cell--muted">{formatDate(user.createdAt)}</td>
                 <td className="cell--actions">
@@ -219,6 +257,15 @@ export function UsersPage(): ReactNode {
                   >
                     Edit
                   </button>
+                  {user.isLocked && (
+                    <button
+                      type="button"
+                      className="button button--ghost"
+                      onClick={() => handleUnlock(user.id)}
+                    >
+                      Unlock
+                    </button>
+                  )}
                   {pendingDelete === user.id ? (
                     <>
                       <button
