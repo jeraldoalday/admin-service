@@ -5,6 +5,7 @@ import { requireActor, type Actor } from './guards';
 import { createId, nowIso } from './ids';
 import { lockStateFor, recordSignInAttempt } from './lockout';
 import { hashPassword, verifyPassword } from './password';
+import { revokeSessionsForUser } from './sessions';
 import type { PublicUser, UserRecord } from './types';
 import {
   changePasswordSchema,
@@ -153,6 +154,12 @@ export function updateProfile(actor: Actor, rawInput: UpdateProfileInput): Publi
  * Changes your own password, which requires proving you know the current one — a session
  * left open on a shared machine should not be enough to lock its owner out of the account.
  * The audit entry records that it happened and nothing about either password.
+ *
+ * Every other session the account has is ended by the change. Somebody changing a password
+ * is very often changing it *because* they think somebody else has it, and a new password
+ * that leaves the intruder's session untouched has not actually shut anyone out. The session
+ * making the change is spared, since being signed out of the machine you are sitting at is
+ * indistinguishable, from where you are sitting, from the change having failed.
  */
 export function changePassword(actor: Actor, rawInput: ChangePasswordInput): PublicUser {
   const user = requireOwnAccount(actor);
@@ -168,11 +175,16 @@ export function changePassword(actor: Actor, rawInput: ChangePasswordInput): Pub
     return toPublicUser(user);
   });
 
+  const revokedSessions = revokeSessionsForUser(user.id, user.id, {
+    exceptSessionId: actor?.sessionId,
+  });
+
   recordAuditLog({
     actorId: user.id,
     action: 'user.password_changed',
     targetType: 'user',
     targetId: user.id,
+    ...(revokedSessions > 0 ? { metadata: { revokedSessions } } : {}),
   });
 
   return updated;
