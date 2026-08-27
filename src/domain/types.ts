@@ -103,6 +103,63 @@ export interface ApiKeyRecord {
   updatedAt: string;
 }
 
+/**
+ * How a sign-in ended. FAILED covers a wrong password and an email nobody has an account
+ * for alike — the two are the same event from the form's point of view, and recording them
+ * differently would turn the attempt log into the account enumeration oracle the sign-in
+ * form itself refuses to be. BLOCKED is an attempt refused by the lockout without the
+ * password being weighed at all.
+ */
+export type SignInOutcome = 'SUCCEEDED' | 'FAILED' | 'BLOCKED';
+export const SIGN_IN_OUTCOMES: SignInOutcome[] = ['SUCCEEDED', 'FAILED', 'BLOCKED'];
+
+/**
+ * One attempt to sign in, successful or not.
+ *
+ * The email is recorded even when no account matches it, since a run of attempts against an
+ * address nobody has is exactly the pattern worth being able to see. The row is the only
+ * durable trace of an attempt: the lockout is derived from these rows rather than from a
+ * counter on the account, so what locked an account out is always still legible after the
+ * fact.
+ */
+export interface SignInAttemptRecord {
+  id: string;
+  /** Normalised to lower case, matching how accounts store theirs. */
+  email: string;
+  /** The account the email resolved to, or null when nobody holds it. */
+  userId: string | null;
+  outcome: SignInOutcome;
+  /**
+   * When an administrator cleared the lockout, if they did. Cleared attempts stay in the
+   * table and stay readable; they simply stop counting towards a lock, which is what keeps
+   * an unlock from erasing the history that explains it.
+   */
+  clearedAt: string | null;
+  createdAt: string;
+}
+
+/**
+ * A signed-in session. It stands in for the refresh token the API used to issue: the browser
+ * holds an opaque id, and everything that decides whether the session is still good — expiry,
+ * revocation, the state of the account behind it — lives here rather than inside a token
+ * nobody can take back once it is out.
+ */
+export interface UserSessionRecord {
+  id: string;
+  userId: string;
+  /** Where the session was started from, as far as the browser would say. */
+  label: string;
+  expiresAt: string;
+  lastSeenAt: string;
+  revokedAt: string | null;
+  /** Who ended it — the session's own owner, another of their sessions, or an admin. */
+  revokedById: string | null;
+  createdAt: string;
+}
+
+export type SessionStatus = 'ACTIVE' | 'REVOKED' | 'EXPIRED';
+export const SESSION_STATUSES: SessionStatus[] = ['ACTIVE', 'REVOKED', 'EXPIRED'];
+
 export interface AuditLogRecord {
   id: string;
   actorId: string | null;
@@ -186,6 +243,45 @@ export interface ApiKeyView {
   revokedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * A session as its owner sees it. The id is included because it is not a secret from the
+ * account that holds it — it is what the screen revokes by — and `isCurrent` is what stops
+ * somebody signing themselves out while trying to clear an old device.
+ */
+export interface UserSessionView {
+  id: string;
+  userId: string;
+  label: string;
+  status: SessionStatus;
+  isCurrent: boolean;
+  expiresAt: string;
+  lastSeenAt: string;
+  revokedAt: string | null;
+  createdAt: string;
+}
+
+export interface SignInAttemptView {
+  id: string;
+  email: string;
+  userId: string | null;
+  outcome: SignInOutcome;
+  clearedAt: string | null;
+  createdAt: string;
+}
+
+/**
+ * The lockout state of one account, derived rather than stored. `retriesRemaining` is what a
+ * screen shows somebody who has mistyped a password twice; `lockedUntil` is what it shows
+ * once there are none left.
+ */
+export interface AccountLockView {
+  email: string;
+  isLocked: boolean;
+  failedAttempts: number;
+  retriesRemaining: number;
+  lockedUntil: string | null;
 }
 
 export interface AuditLogView {

@@ -1,11 +1,13 @@
 import type {
   ApiKeyRecord,
   AuditLogRecord,
+  SignInAttemptRecord,
   TeamInviteRecord,
   TeamMembershipRecord,
   TeamPermissionGrantRecord,
   TeamRecord,
   UserRecord,
+  UserSessionRecord,
 } from './types';
 
 /**
@@ -21,16 +23,20 @@ export interface Database {
   invites: TeamInviteRecord[];
   permissionGrants: TeamPermissionGrantRecord[];
   apiKeys: ApiKeyRecord[];
+  sessions: UserSessionRecord[];
+  signInAttempts: SignInAttemptRecord[];
   auditLogs: AuditLogRecord[];
 }
 
 /**
- * Bumped to 2 when audit entries gained the team they belong to. Stored databases are
- * discarded rather than migrated on a version change, which for a demo console holding
+ * Bumped to 2 when audit entries gained the team they belong to, and to 3 when sign-in grew
+ * a memory: the sessions a sign-in opens and the attempts it leaves behind. Stored databases
+ * are discarded rather than migrated on a version change, which for a demo console holding
  * seeded data is the honest trade: a half-migrated audit trail would be worse than a fresh
- * one.
+ * one, and a half-migrated session table would sign people in on evidence it cannot vouch
+ * for.
  */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 export const STORAGE_KEY = 'admin-service:db';
 
 export function emptyDatabase(): Database {
@@ -42,6 +48,8 @@ export function emptyDatabase(): Database {
     invites: [],
     permissionGrants: [],
     apiKeys: [],
+    sessions: [],
+    signInAttempts: [],
     auditLogs: [],
   };
 }
@@ -109,6 +117,8 @@ function isDatabase(value: unknown): value is Database {
     Array.isArray(candidate.invites) &&
     Array.isArray(candidate.permissionGrants) &&
     Array.isArray(candidate.apiKeys) &&
+    Array.isArray(candidate.sessions) &&
+    Array.isArray(candidate.signInAttempts) &&
     Array.isArray(candidate.auditLogs)
   );
 }
