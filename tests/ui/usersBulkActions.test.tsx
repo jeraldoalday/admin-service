@@ -149,6 +149,40 @@ describe('acting on a selection', () => {
     expect(screen.queryByRole('group', { name: 'Bulk actions' })).not.toBeInTheDocument();
   });
 
+  it('lets go of an account deleted from its own row', async () => {
+    const { user } = renderAsAdmin();
+    const row = table().getByText('Mira Okafor').closest('tr') as HTMLElement;
+
+    await user.click(table().getByLabelText('Select Mira Okafor'));
+    await user.click(table().getByLabelText('Select Dana Diaz'));
+    await user.click(within(row).getByRole('button', { name: 'Delete' }));
+    await user.click(within(row).getByRole('button', { name: 'Confirm delete' }));
+
+    // The selection carries across pages, so an id deleted underneath it would otherwise
+    // stay held and invisible, and the next batch would report it as "User not found".
+    expect(await bar().findByText('1 account selected')).toBeInTheDocument();
+
+    await user.click(bar().getByRole('button', { name: 'Deactivate' }));
+    await user.click(screen.getByRole('button', { name: 'Deactivate 1 account' }));
+
+    expect(await screen.findByText(/Deactivated 1 account/)).toBeInTheDocument();
+    expect(screen.queryByText('Refused')).not.toBeInTheDocument();
+  });
+
+  it('clears an older export notice when a batch reports', async () => {
+    const { user } = renderAsAdmin();
+
+    await user.click(screen.getByRole('button', { name: 'Export CSV' }));
+    expect(await screen.findByText(/Exported 5 accounts/)).toBeInTheDocument();
+
+    await user.click(table().getByLabelText('Select Dana Diaz'));
+    await user.click(bar().getByRole('button', { name: 'Deactivate' }));
+    await user.click(screen.getByRole('button', { name: 'Deactivate 1 account' }));
+
+    expect(await screen.findByText(/Deactivated 1 account/)).toBeInTheDocument();
+    expect(screen.queryByText(/Exported 5 accounts/)).not.toBeInTheDocument();
+  });
+
   it('unlocks the accounts that are actually locked', async () => {
     const raj = getDatabase().users.find((candidate) => candidate.email === 'raj@example.com');
     for (let attempt = 0; attempt < 5; attempt += 1) {

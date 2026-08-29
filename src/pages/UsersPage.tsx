@@ -185,6 +185,11 @@ export function UsersPage(): ReactNode {
     try {
       users.deleteUser(actor, id);
       setPendingDelete(null);
+      // The row's own Delete has to reach the selection too. A selection carries across
+      // pages, so an id deleted from underneath it stays held and invisible: the bar goes on
+      // counting an account that no longer exists, and the next batch reports it as "User not
+      // found" — an error about something the reader never asked for.
+      setSelectedIds((previous) => previous.filter((candidate) => candidate !== id));
     } catch (caught) {
       setError(toErrorMessage(caught));
     }
@@ -266,7 +271,12 @@ export function UsersPage(): ReactNode {
         <BulkActionBar
           selectedIds={selectedIds}
           onClear={() => setSelectedIds([])}
-          onApplied={() => setSelectedIds([])}
+          onApplied={() => {
+            setSelectedIds([]);
+            // Two results side by side, one of them describing a file downloaded several
+            // actions ago, read as one report about what just happened.
+            setExported(null);
+          }}
         />
 
         {result.items.length === 0 ? (
