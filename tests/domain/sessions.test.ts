@@ -181,6 +181,30 @@ describe('the sweep for expired sessions', () => {
 
     expect(session.revokedAt).toBeNull();
   });
+
+  it('leaves a swept session reading as expired rather than revoked', () => {
+    const session = sessions.startSession(miraActor().id);
+    session.expiresAt = new Date(Date.now() - 1000).toISOString();
+
+    expect(sessions.effectiveSessionStatus(session)).toBe('EXPIRED');
+    sessions.expireStaleSessions();
+
+    // The sweep stamps `revokedAt` because the row has nowhere else to say it is over. That
+    // must not turn "this timed out" into "somebody ended this" on the account screen.
+    expect(sessions.effectiveSessionStatus(session)).toBe('EXPIRED');
+  });
+
+  it('keeps a session somebody really revoked reading as revoked once it lapses', () => {
+    const mira = signedIn(miraActor());
+    const other = sessions.startSession(mira.id, 'Safari on iOS');
+
+    sessions.revokeSession(mira, other.id);
+
+    // Read from well past the expiry it would have reached had nobody ended it: the reason
+    // it is dead is still the revocation, and the record should keep saying so.
+    const pastItsExpiry = Date.parse(other.expiresAt) + 1000;
+    expect(sessions.effectiveSessionStatus(other, pastItsExpiry)).toBe('REVOKED');
+  });
 });
 
 describe('sessions and the account behind them', () => {

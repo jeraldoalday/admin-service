@@ -40,14 +40,25 @@ export const SESSION_TOUCH_INTERVAL_MS = 60 * 1000;
  * past its expiry is already dead, and nothing rewrites the row to say so until the boot
  * sweep gets to it — so, as with an invite or an API key, the truth is derived on read and
  * every screen agrees at once.
+ *
+ * Which of the two dead states it is, is decided by *when* the revocation happened rather
+ * than by whether there is one. The boot sweep settles a lapsed session by stamping
+ * `revokedAt` with the expiry it slept through, since the row has nowhere else to record
+ * that it is over — and reading any revocation as REVOKED meant a session that merely timed
+ * out changed its mind about how it ended the next time the console started up. Somebody
+ * scanning `/account` for the entry that is not theirs is looking for exactly that word, so
+ * a stamp the sweep wrote is a false positive of the only kind that list can produce. A
+ * revocation dated before the expiry is a real one — somebody ended it — and stays REVOKED
+ * forever after; one dated at or after the expiry is the sweep catching up with a session
+ * that had already run out.
  */
 export function effectiveSessionStatus(
   session: UserSessionRecord,
   now = Date.now(),
 ): SessionStatus {
-  if (session.revokedAt) return 'REVOKED';
-  if (Date.parse(session.expiresAt) <= now) return 'EXPIRED';
-  return 'ACTIVE';
+  const expiresAt = Date.parse(session.expiresAt);
+  if (session.revokedAt && Date.parse(session.revokedAt) < expiresAt) return 'REVOKED';
+  return expiresAt <= now ? 'EXPIRED' : 'ACTIVE';
 }
 
 function toSessionView(session: UserSessionRecord, currentSessionId?: string): UserSessionView {
