@@ -470,6 +470,20 @@ a {
   flex-wrap: wrap;
 }
 
+/* The preview is a table inside a dialog, so it gets its own scroll rather than stretching
+   the dialog past the viewport on a file with a long address in it. */
+.import-preview {
+  display: grid;
+  gap: 0.5rem;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.import-preview .cell--tag {
+  text-transform: none;
+  letter-spacing: normal;
+}
+
 .bulk-result {
   display: grid;
   gap: 0.5rem;

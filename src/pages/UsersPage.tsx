@@ -25,6 +25,7 @@ import {
   type UserSortField,
 } from '@/domain';
 import { BulkActionBar } from '@/pages/users/BulkActionBar';
+import { ImportUsersDialog } from '@/pages/users/ImportUsersDialog';
 import { downloadTextFile, toCsv } from '@/lib/csv';
 import { formatDate, formatDateTime } from '@/lib/format';
 
@@ -67,6 +68,7 @@ export function UsersPage(): ReactNode {
   const [error, setError] = useState<string | null>(null);
   const [exported, setExported] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [importing, setImporting] = useState(false);
 
   const filters: UserFilters = {
     ...(search.trim() ? { search: search.trim() } : {}),
@@ -194,9 +196,14 @@ export function UsersPage(): ReactNode {
         title="Users"
         description="Every account on the platform. Updates, unlocks, and deletions are written to the audit log."
         actions={
-          <button type="button" className="button" onClick={exportMatching}>
-            Export CSV
-          </button>
+          <>
+            <button type="button" className="button" onClick={() => setImporting(true)}>
+              Import CSV
+            </button>
+            <button type="button" className="button" onClick={exportMatching}>
+              Export CSV
+            </button>
+          </>
         }
       />
 
@@ -369,6 +376,7 @@ export function UsersPage(): ReactNode {
       </Card>
 
       {editing && <EditUserDialog user={editing} onClose={() => setEditing(null)} />}
+      {importing && <ImportUsersDialog onClose={() => setImporting(false)} />}
     </>
   );
 }
