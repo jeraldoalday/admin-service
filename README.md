@@ -46,16 +46,16 @@ data** in the sidebar puts it back to the seeded dataset and signs you out.
 
 ## Screens
 
-| Route             | Access         | What it does                                                           |
-| ----------------- | -------------- | ---------------------------------------------------------------------- |
-| `/sign-in`        | public         | Sign in or register; the first account ever created becomes an admin   |
-| `/`               | signed in      | Overview — your teams, and for admins the platform totals and activity |
-| `/account`        | signed in      | Your name, your password, and the devices signed in as you             |
-| `/teams`          | signed in      | Teams you belong to, and the form that creates one                     |
-| `/teams/:teamId`  | member         | One team: members, invites, API keys, activity, and settings           |
-| `/invites/:token` | signed in      | Accept an invite addressed to your account's email                     |
-| `/users`          | platform admin | Every account: search, filter, sort, edit, unlock, delete              |
-| `/audit-logs`     | platform admin | Append-only history of every mutation, filterable by actor and text    |
+| Route             | Access         | What it does                                                             |
+| ----------------- | -------------- | ------------------------------------------------------------------------ |
+| `/sign-in`        | public         | Sign in or register; the first account ever created becomes an admin     |
+| `/`               | signed in      | Overview — your teams, and for admins the platform totals and activity   |
+| `/account`        | signed in      | Your name, your password, and the devices signed in as you               |
+| `/teams`          | signed in      | Teams you belong to, and the form that creates one                       |
+| `/teams/:teamId`  | member         | One team: members, invites, API keys, activity, and settings             |
+| `/invites/:token` | signed in      | Accept an invite addressed to your account's email                       |
+| `/users`          | platform admin | Every account: search, filter, sort, edit, unlock, delete, batch, import |
+| `/audit-logs`     | platform admin | Append-only history of every mutation, filterable by actor and text      |
 
 Team screens only render the sections the caller's permissions cover, and the domain layer
 enforces the same rules independently — a screen you can reach still cannot perform an action
@@ -78,6 +78,35 @@ shared machine is not by itself enough to lock its owner out, and the role and a
 stay where they belong — on the admin screens, as somebody else's decision. Deleting an
 account hands over any team it was the sole owner of before it goes, since the rules that
 protect a last owner would otherwise leave that team unreachable.
+
+**Batches.** An administrator clearing up after an incident works through a filtered list
+rather than a single row, so the users screen can select accounts and activate, deactivate,
+unlock, or delete all of them at once. A batch is exactly its parts: every account goes
+through the same single-account function the row's own button calls, so the self-protection
+rules, the session revocation that rides along with a deactivation, the handover of a team
+whose only owner is being deleted, and the per-account audit entries all keep working without
+being reimplemented. One account failing does not stop the rest — refusing forty because the
+thirty-first was the administrator's own account is a worse answer than doing thirty-nine and
+saying which one was refused — and the report says what changed, what was already in that
+state, and what was refused, each in the domain's own words. An account already where the
+action would put it is reported as needing no change rather than as an error, and nothing is
+written for it: a bulk unlock across a page would otherwise stamp the audit log with thirty
+entries describing nothing. Selections carry across pages, since a batch is often gathered a
+screen at a time, but any change to the filters clears them.
+
+**Imports.** A list of new colleagues usually already exists as a spreadsheet, and typing it
+into a form thirty times is where the mistyped address gets made. `/users` reads a CSV — an
+`email` and a `name` column, optionally a `role`, under whichever house style the file names
+them — and shows a row-by-row preview of what importing it would do before anything is
+written, each row against the line of the file it came from. The import may create accounts
+and nothing else: an address that already has one is skipped and said so, since an import
+that could write to existing accounts would be a way to rename an administrator, or change
+their role, by uploading a file whose reviewer is looking at names rather than at what the
+console will do with them. There is deliberately no password column — a CSV of plaintext
+passwords is a file nobody can safely produce or delete afterwards — so each created account
+is given a generated password, handed back exactly once, as an API key secret is. Imported
+accounts are created by the administrator who ran the import rather than by themselves, which
+is what the audit entry says; registration is the self-service act, and this is not one.
 
 **Sign-in** is throttled and remembered. Five failed attempts inside a quarter of an hour
 close an address off, and the refusal is its own error type so the form can say "wait" rather
@@ -108,7 +137,9 @@ per-device revoke and "sign out other devices", which spares the device asking. 
 password ends every other session, since somebody changing a password is usually doing it
 because they believe somebody else has it. Deactivating an account revokes its sessions and
 deleting one takes them with it, and a sweep at boot settles the ones that expired while the
-console was closed.
+console was closed. A session the sweep settled still reads as expired rather than revoked:
+"Revoked" is the word somebody scanning the list for a device that is not theirs is looking
+for, so it is reserved for a session somebody actually ended.
 
 **Teams** are a self-service multi-tenancy layer, independent of the platform `role`: any
 signed-in user can create a team and becomes its `OWNER`. Team roles (`OWNER`/`ADMIN`/`MEMBER`)
@@ -165,7 +196,10 @@ since each reads through an unpaginated query that shares its filters with the p
 Ordering travels with those filters, so a file arrives in the order the screen asked for rather
 than one the reader has to redo by hand. Fields are quoted per RFC 4180, and values that begin
 with `=`, `+`, `-`, or `@` are prefixed, so a spreadsheet reads a user-chosen display name as
-text rather than as a formula.
+text rather than as a formula. The same module reads a CSV back — quoted values with commas
+and newlines in them, any of the three line endings, a byte-order mark left by Excel — and
+carries the line each record started on rather than its index, because a quoted value can
+span lines and "line 27" is something a reader can go and look at.
 
 Failures use the same error types the rules always had — `BadRequestError`, `Unauthorized`,
 `Forbidden`, `NotFound`, `Conflict` — and screens render them in place instead of unmounting.
@@ -187,16 +221,18 @@ src/
   pages/                 One module per screen; team/ holds the team tabs
     AccountPage.tsx      Self-service name, password, and security
     account/             The signed-in devices and sign-in history cards
+    users/               The batch action bar and the CSV import dialog
     team/ActivityTab.tsx One team's slice of the audit log
   lib/
     format.ts            Date and permission formatting
-    csv.ts               RFC 4180 serialisation for exports
+    csv.ts               RFC 4180 serialisation, both directions
     device.ts            A readable name for the browser a session was opened from
   domain/
     types.ts             Entities, roles, permissions, role defaults
     database.ts          The tables, persistence, and change notification
     guards.ts            Actor, admin, membership, and permission checks
     auth.ts users.ts teams.ts permissions.ts apiKeys.ts audit.ts
+    userImport.ts        Reading a list of accounts in from a file
     sessions.ts          Signed-in sessions: opening, resolving, revoking, sweeping
     lockout.ts           Sign-in attempts and the throttle derived from them
     service.ts           The machine-facing, API-key-authenticated surface
@@ -222,7 +258,7 @@ drive it the way a person would; nothing is mocked. The SHA-256 implementation i
 against `node:crypto` directly, since API key lookup depends on the two agreeing.
 
 `npm run test:coverage` reports on the domain and app layers and fails below its thresholds —
-currently around 97.7% of statements and 92.2% of branches, with the thresholds set just under
+currently around 98.3% of statements and 93.1% of branches, with the thresholds set just under
 that so a real regression trips them and an ordinary refactor does not. `npm run check` runs
 lint, formatting, types, and that covered suite in one pass, which is exactly what CI runs.
 The screens are covered through the whole-app tests rather than by chasing a number.
