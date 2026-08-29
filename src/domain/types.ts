@@ -6,25 +6,39 @@
  * `JSON.stringify`/`localStorage` without a revival step.
  */
 
-export type UserRole = 'ADMIN' | 'MEMBER';
-export const USER_ROLES: UserRole[] = ['ADMIN', 'MEMBER'];
+/**
+ * Each of these lists is the single description of its own set of values: the union type is
+ * derived from the list rather than written beside it, and the zod enum in `validation.ts`
+ * is built from the same list again. Spelling a set out twice is how a sixth permission ends
+ * up accepted by the type checker and rejected by the schema — or, worse, the other way
+ * round — and the duplication is invisible until exactly that happens.
+ *
+ * They are frozen as well as constant. `as const` is a promise to the type checker and
+ * nothing more; these lists are read directly by the guards and rendered directly by the
+ * screens, so a stray push into one would add a role or a permission to a running console.
+ */
+export const USER_ROLES = Object.freeze(['ADMIN', 'MEMBER'] as const);
+export type UserRole = (typeof USER_ROLES)[number];
 
-export type TeamRole = 'OWNER' | 'ADMIN' | 'MEMBER';
-export const TEAM_ROLES: TeamRole[] = ['OWNER', 'ADMIN', 'MEMBER'];
+export const TEAM_ROLES = Object.freeze(['OWNER', 'ADMIN', 'MEMBER'] as const);
+export type TeamRole = (typeof TEAM_ROLES)[number];
 
-export type InviteStatus = 'PENDING' | 'ACCEPTED' | 'REVOKED' | 'EXPIRED';
-export const INVITE_STATUSES: InviteStatus[] = ['PENDING', 'ACCEPTED', 'REVOKED', 'EXPIRED'];
+export const INVITE_STATUSES = Object.freeze([
+  'PENDING',
+  'ACCEPTED',
+  'REVOKED',
+  'EXPIRED',
+] as const);
+export type InviteStatus = (typeof INVITE_STATUSES)[number];
 
-export type TeamPermission =
-  'MANAGE_TEAM' | 'MANAGE_MEMBERS' | 'MANAGE_INVITES' | 'MANAGE_PERMISSIONS' | 'MANAGE_API_KEYS';
-
-export const TEAM_PERMISSIONS: TeamPermission[] = [
+export const TEAM_PERMISSIONS = Object.freeze([
   'MANAGE_TEAM',
   'MANAGE_MEMBERS',
   'MANAGE_INVITES',
   'MANAGE_PERMISSIONS',
   'MANAGE_API_KEYS',
-];
+] as const);
+export type TeamPermission = (typeof TEAM_PERMISSIONS)[number];
 
 /**
  * Permissions every member of a role has by default, independent of any grants.
@@ -42,8 +56,8 @@ export const ROLE_DEFAULT_PERMISSIONS: Readonly<Record<TeamRole, readonly TeamPe
     MEMBER: Object.freeze([]),
   });
 
-export type ApiKeyStatus = 'ACTIVE' | 'REVOKED' | 'EXPIRED';
-export const API_KEY_STATUSES: ApiKeyStatus[] = ['ACTIVE', 'REVOKED', 'EXPIRED'];
+export const API_KEY_STATUSES = Object.freeze(['ACTIVE', 'REVOKED', 'EXPIRED'] as const);
+export type ApiKeyStatus = (typeof API_KEY_STATUSES)[number];
 
 export interface UserRecord {
   id: string;
@@ -121,8 +135,8 @@ export interface ApiKeyRecord {
  * back from deactivation locked as well, and a locked-out address should not be able to
  * extend its own lockout by continuing to knock.
  */
-export type SignInOutcome = 'SUCCEEDED' | 'FAILED' | 'BLOCKED';
-export const SIGN_IN_OUTCOMES: SignInOutcome[] = ['SUCCEEDED', 'FAILED', 'BLOCKED'];
+export const SIGN_IN_OUTCOMES = Object.freeze(['SUCCEEDED', 'FAILED', 'BLOCKED'] as const);
+export type SignInOutcome = (typeof SIGN_IN_OUTCOMES)[number];
 
 /**
  * One attempt to sign in, successful or not.
@@ -168,8 +182,8 @@ export interface UserSessionRecord {
   createdAt: string;
 }
 
-export type SessionStatus = 'ACTIVE' | 'REVOKED' | 'EXPIRED';
-export const SESSION_STATUSES: SessionStatus[] = ['ACTIVE', 'REVOKED', 'EXPIRED'];
+export const SESSION_STATUSES = Object.freeze(['ACTIVE', 'REVOKED', 'EXPIRED'] as const);
+export type SessionStatus = (typeof SESSION_STATUSES)[number];
 
 export interface AuditLogRecord {
   id: string;
@@ -308,8 +322,13 @@ export interface AccountLockView {
  * thing they could already do to a single account from its row; nothing is bulk-only, which
  * is what keeps the batch path from becoming a second, laxer set of rules.
  */
-export type BulkUserAction = 'activate' | 'deactivate' | 'unlock' | 'delete';
-export const BULK_USER_ACTIONS: BulkUserAction[] = ['activate', 'deactivate', 'unlock', 'delete'];
+export const BULK_USER_ACTIONS = Object.freeze([
+  'activate',
+  'deactivate',
+  'unlock',
+  'delete',
+] as const);
+export type BulkUserAction = (typeof BULK_USER_ACTIONS)[number];
 
 /**
  * What became of one account in a batch.
@@ -319,7 +338,12 @@ export const BULK_USER_ACTIONS: BulkUserAction[] = ['activate', 'deactivate', 'u
  * the reader to ignore the error list — which is the one part of the report that matters.
  * It is not CHANGED either, since nothing was written and nothing reached the audit log.
  */
-export type BulkUserOutcomeStatus = 'CHANGED' | 'UNCHANGED' | 'FAILED';
+export const BULK_USER_OUTCOME_STATUSES = Object.freeze([
+  'CHANGED',
+  'UNCHANGED',
+  'FAILED',
+] as const);
+export type BulkUserOutcomeStatus = (typeof BULK_USER_OUTCOME_STATUSES)[number];
 
 /**
  * One line of a batch report. The name and email are captured before the action runs, so a

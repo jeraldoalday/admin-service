@@ -1,6 +1,16 @@
 import { z } from 'zod';
 import { BadRequestError } from './errors';
 import { DEFAULT_PAGE_SIZE } from './pagination';
+import {
+  API_KEY_STATUSES,
+  BULK_USER_ACTIONS,
+  INVITE_STATUSES,
+  SESSION_STATUSES,
+  SIGN_IN_OUTCOMES,
+  TEAM_PERMISSIONS,
+  TEAM_ROLES,
+  USER_ROLES,
+} from './types';
 
 /**
  * Input schemas carried over verbatim from the HTTP service. Validating in the browser keeps
@@ -13,19 +23,20 @@ export const paginationSchema = z.object({
   pageSize: z.coerce.number().int().positive().max(100).default(DEFAULT_PAGE_SIZE),
 });
 
-export const userRoleEnum = z.enum(['ADMIN', 'MEMBER']);
-export const teamRoleEnum = z.enum(['OWNER', 'ADMIN', 'MEMBER']);
-export const inviteStatusEnum = z.enum(['PENDING', 'ACCEPTED', 'REVOKED', 'EXPIRED']);
-export const apiKeyStatusEnum = z.enum(['ACTIVE', 'REVOKED', 'EXPIRED']);
-export const sessionStatusEnum = z.enum(['ACTIVE', 'REVOKED', 'EXPIRED']);
-export const signInOutcomeEnum = z.enum(['SUCCEEDED', 'FAILED', 'BLOCKED']);
-export const teamPermissionEnum = z.enum([
-  'MANAGE_TEAM',
-  'MANAGE_MEMBERS',
-  'MANAGE_INVITES',
-  'MANAGE_PERMISSIONS',
-  'MANAGE_API_KEYS',
-]);
+/**
+ * Every schema below builds its enum from the list in `types.ts` rather than repeating the
+ * values. The union type is derived from the same list, so the type checker and the schema
+ * cannot end up disagreeing about what a valid role or permission is — which is exactly what
+ * a second copy of the list eventually causes, quietly, the first time somebody adds a value
+ * to one of them.
+ */
+export const userRoleEnum = z.enum(USER_ROLES);
+export const teamRoleEnum = z.enum(TEAM_ROLES);
+export const inviteStatusEnum = z.enum(INVITE_STATUSES);
+export const apiKeyStatusEnum = z.enum(API_KEY_STATUSES);
+export const sessionStatusEnum = z.enum(SESSION_STATUSES);
+export const signInOutcomeEnum = z.enum(SIGN_IN_OUTCOMES);
+export const teamPermissionEnum = z.enum(TEAM_PERMISSIONS);
 
 // -- auth ------------------------------------------------------------------
 
@@ -127,7 +138,7 @@ export type UpdateUserInput = z.infer<typeof updateUserSchema>;
  * should be trusted to catch. A hundred is comfortably more than any deliberate batch and
  * far less than a whole platform.
  */
-export const bulkUserActionEnum = z.enum(['activate', 'deactivate', 'unlock', 'delete']);
+export const bulkUserActionEnum = z.enum(BULK_USER_ACTIONS);
 
 export const bulkUserActionSchema = z.object({
   action: bulkUserActionEnum,
@@ -179,8 +190,13 @@ export type ListInvitesQuery = z.input<typeof listInvitesQuerySchema>;
 
 // -- permissions -----------------------------------------------------------
 
+/**
+ * The cap is the number of permissions there are, taken from the list rather than written
+ * out. A hardcoded 5 was correct only for as long as there were five, and would have started
+ * silently rejecting a legitimate grant the day a sixth was added.
+ */
 export const setMemberPermissionsSchema = z.object({
-  permissions: z.array(teamPermissionEnum).max(5),
+  permissions: z.array(teamPermissionEnum).max(TEAM_PERMISSIONS.length),
 });
 export type SetMemberPermissionsInput = z.infer<typeof setMemberPermissionsSchema>;
 
@@ -188,7 +204,7 @@ export type SetMemberPermissionsInput = z.infer<typeof setMemberPermissionsSchem
 
 export const createApiKeySchema = z.object({
   name: z.string().trim().min(1, 'Key name is required').max(120),
-  permissions: z.array(teamPermissionEnum).max(5).default([]),
+  permissions: z.array(teamPermissionEnum).max(TEAM_PERMISSIONS.length).default([]),
   expiresAt: z
     .string()
     .trim()
