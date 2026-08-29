@@ -138,6 +138,21 @@ export const bulkUserActionSchema = z.object({
 });
 export type BulkUserActionInput = z.input<typeof bulkUserActionSchema>;
 
+/**
+ * One row of an imported file, once its cells have been named.
+ *
+ * There is deliberately no password column. A CSV of plaintext passwords is a file nobody
+ * should be asked to produce and nobody can safely delete afterwards — it gets mailed
+ * around, it sits in a downloads folder, and every account in it is compromised the moment
+ * it does. Imported accounts are given a generated password instead, handed back once.
+ */
+export const importUserRowSchema = z.object({
+  email: z.string().trim().toLowerCase().email('is not a valid email address'),
+  displayName: z.string().trim().min(1, 'is required').max(120),
+  role: userRoleEnum.default('MEMBER'),
+});
+export type ImportUserRowInput = z.input<typeof importUserRowSchema>;
+
 // -- teams -----------------------------------------------------------------
 
 export const createTeamSchema = z.object({

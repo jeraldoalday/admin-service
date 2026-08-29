@@ -57,3 +57,11 @@ export * as audit from './audit';
 export * as lockout from './lockout';
 export * as sessions from './sessions';
 export * as service from './service';
+export * as userImport from './userImport';
+export type {
+  ImportedAccount,
+  ImportRowStatus,
+  UserImportPlan,
+  UserImportResult,
+  UserImportRow,
+} from './userImport';
