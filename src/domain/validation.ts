@@ -118,6 +118,26 @@ export const updateUserSchema = z
   });
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 
+/**
+ * A batch of accounts and the one thing to do to all of them.
+ *
+ * The cap is a guard against a mis-click rather than a performance limit: the whole point of
+ * the screen is that a filter can select every account on the platform, and "delete" applied
+ * to an accidental selection of a thousand is not something a confirmation dialog alone
+ * should be trusted to catch. A hundred is comfortably more than any deliberate batch and
+ * far less than a whole platform.
+ */
+export const bulkUserActionEnum = z.enum(['activate', 'deactivate', 'unlock', 'delete']);
+
+export const bulkUserActionSchema = z.object({
+  action: bulkUserActionEnum,
+  userIds: z
+    .array(z.string().trim().min(1))
+    .min(1, 'Select at least one account')
+    .max(100, 'Select no more than 100 accounts at a time'),
+});
+export type BulkUserActionInput = z.input<typeof bulkUserActionSchema>;
+
 // -- teams -----------------------------------------------------------------
 
 export const createTeamSchema = z.object({

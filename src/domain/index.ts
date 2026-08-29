@@ -6,6 +6,7 @@
 export * from './types';
 export type {
   AuditLogFilters,
+  BulkUserActionInput,
   ChangePasswordInput,
   CreateApiKeyInput,
   CreateInviteInput,

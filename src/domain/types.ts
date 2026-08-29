@@ -298,6 +298,46 @@ export interface AccountLockView {
   lockedUntil: string | null;
 }
 
+/**
+ * The four things an administrator can do to a batch of accounts at once. Each one is a
+ * thing they could already do to a single account from its row; nothing is bulk-only, which
+ * is what keeps the batch path from becoming a second, laxer set of rules.
+ */
+export type BulkUserAction = 'activate' | 'deactivate' | 'unlock' | 'delete';
+export const BULK_USER_ACTIONS: BulkUserAction[] = ['activate', 'deactivate', 'unlock', 'delete'];
+
+/**
+ * What became of one account in a batch.
+ *
+ * UNCHANGED is deliberately not FAILED. Selecting forty accounts and deactivating them will
+ * usually catch a few that were deactivated already, and reporting those as errors trains
+ * the reader to ignore the error list — which is the one part of the report that matters.
+ * It is not CHANGED either, since nothing was written and nothing reached the audit log.
+ */
+export type BulkUserOutcomeStatus = 'CHANGED' | 'UNCHANGED' | 'FAILED';
+
+/**
+ * One line of a batch report. The name and email are captured before the action runs, so a
+ * deleted account is still nameable in the report that says it was deleted.
+ */
+export interface BulkUserOutcome {
+  userId: string;
+  email: string;
+  displayName: string;
+  status: BulkUserOutcomeStatus;
+  /** Why it was left alone or refused; null when it simply worked. */
+  message: string | null;
+}
+
+export interface BulkUserActionResult {
+  action: BulkUserAction;
+  /** How many distinct accounts were asked for, which is not always how many were found. */
+  requested: number;
+  changed: BulkUserOutcome[];
+  unchanged: BulkUserOutcome[];
+  failed: BulkUserOutcome[];
+}
+
 export interface AuditLogView {
   id: string;
   actorId: string | null;

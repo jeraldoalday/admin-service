@@ -1,18 +1,26 @@
 import { recordAuditLog } from './audit';
 import { getDatabase, mutate } from './database';
-import { BadRequestError, NotFoundError } from './errors';
+import { BadRequestError, NotFoundError, toErrorMessage } from './errors';
 import { requireAdmin, type Actor } from './guards';
 import { nowIso } from './ids';
-import { lockStateFor } from './lockout';
+import { lockStateFor, unlockAccount } from './lockout';
 import { paginate, sortNewestFirst, type PaginatedResult } from './pagination';
 import { deleteSessionsForUser, revokeSessionsForUser } from './sessions';
 import { reassignTeamsOwnedSolelyBy } from './teams';
-import type { AdminUserView, UserRecord } from './types';
+import type {
+  AdminUserView,
+  BulkUserAction,
+  BulkUserActionResult,
+  BulkUserOutcome,
+  UserRecord,
+} from './types';
 import {
+  bulkUserActionSchema,
   listUsersQuerySchema,
   parseInput,
   updateUserSchema,
   userFiltersSchema,
+  type BulkUserActionInput,
   type ListUsersQuery,
   type SortDirection,
   type UpdateUserInput,
@@ -212,4 +220,131 @@ export function deleteUser(actor: Actor, id: string): void {
     targetId: id,
     ...(reassignments.length > 0 ? { metadata: { reassignedTeams: reassignments } } : {}),
   });
+}
+
+/**
+ * Applies one action to a batch of accounts, and reports what became of each of them.
+ *
+ * Every account goes through the same single-account function the row's own button calls —
+ * `updateUser`, `unlockAccount`, `deleteUser` — rather than through a batch-shaped write of
+ * its own. That is the whole design: the self-protection rules, the session revocation that
+ * rides along with a deactivation, the handover of a team whose only owner is being deleted,
+ * and the per-account audit entries all keep working because none of them has been
+ * reimplemented here. A second code path for the same four actions would be a second place
+ * for those rules to be forgotten.
+ *
+ * One account failing does not stop the rest. A batch is a list of independent requests that
+ * happen to have been asked for together — refusing all forty because the thirty-first was
+ * the admin's own account would be a worse answer than doing thirty-nine and saying which
+ * one was refused. The report is what makes that honest: it names the ones that were
+ * refused, and why, in the caller's own words from the domain error.
+ */
+export function bulkUpdateUsers(actor: Actor, rawInput: BulkUserActionInput): BulkUserActionResult {
+  const admin = requireAdmin(actor);
+  const input = parseInput(bulkUserActionSchema, rawInput);
+
+  // The same account named twice is one account, not two attempts at it — a second pass
+  // would report a delete as having failed with "User not found" against a row this very
+  // call had just removed.
+  const userIds = [...new Set(input.userIds)];
+
+  const outcomes = userIds.map((userId) => applyBulkAction(admin, input.action, userId));
+
+  const result: BulkUserActionResult = {
+    action: input.action,
+    requested: userIds.length,
+    changed: outcomes.filter((outcome) => outcome.status === 'CHANGED'),
+    unchanged: outcomes.filter((outcome) => outcome.status === 'UNCHANGED'),
+    failed: outcomes.filter((outcome) => outcome.status === 'FAILED'),
+  };
+
+  // A summary entry on top of the per-account ones the actions themselves wrote. Without it
+  // the log shows thirty deactivations a second apart and nothing saying they were one
+  // decision; with it, a reader can tell a batch from a bad afternoon. It is recorded even
+  // when every account was refused, since an administrator reaching for a bulk delete is
+  // worth a line in the log whether or not it landed.
+  recordAuditLog({
+    actorId: admin.id,
+    action: `user.bulk_${input.action}`,
+    targetType: 'user',
+    targetId: null,
+    metadata: {
+      requested: result.requested,
+      changed: result.changed.length,
+      unchanged: result.unchanged.length,
+      failed: result.failed.length,
+      userIds,
+    },
+  });
+
+  return result;
+}
+
+function applyBulkAction(admin: Actor, action: BulkUserAction, userId: string): BulkUserOutcome {
+  const user = getDatabase().users.find((candidate) => candidate.id === userId);
+
+  if (!user) {
+    return {
+      userId,
+      email: userId,
+      displayName: userId,
+      status: 'FAILED',
+      message: 'User not found',
+    };
+  }
+
+  // Captured before the action runs: a deleted account has no row left to read a name off,
+  // and a report that could only identify it by id would be the least readable line in it.
+  const identity = { userId, email: user.email, displayName: user.displayName };
+
+  const alreadyThere = describeNoOp(action, user);
+  if (alreadyThere) {
+    return { ...identity, status: 'UNCHANGED', message: alreadyThere };
+  }
+
+  try {
+    runBulkAction(admin, action, userId);
+    return { ...identity, status: 'CHANGED', message: null };
+  } catch (caught) {
+    return { ...identity, status: 'FAILED', message: toErrorMessage(caught) };
+  }
+}
+
+/**
+ * Whether the account is already where the action would put it, and how to say so.
+ *
+ * Checking first rather than writing and shrugging is what keeps the audit log worth
+ * reading: `updateUser` and `unlockAccount` both record an entry unconditionally, so a bulk
+ * unlock across a filtered page would otherwise stamp "unlocked" against every account that
+ * was never locked — thirty entries describing nothing. Deletion has no such state to be in
+ * already; an account either exists or was not found.
+ */
+function describeNoOp(action: BulkUserAction, user: UserRecord): string | null {
+  switch (action) {
+    case 'activate':
+      return user.isActive ? 'Already active' : null;
+    case 'deactivate':
+      return user.isActive ? null : 'Already deactivated';
+    case 'unlock':
+      return lockStateFor(user.email).isLocked ? null : 'Not locked out';
+    case 'delete':
+      return null;
+  }
+}
+
+function runBulkAction(admin: Actor, action: BulkUserAction, userId: string): void {
+  switch (action) {
+    case 'activate':
+      updateUser(admin, userId, { isActive: true });
+      return;
+    case 'deactivate':
+      updateUser(admin, userId, { isActive: false });
+      return;
+    case 'unlock':
+      unlockAccount(admin, userId);
+      return;
+    case 'delete':
+      deleteUser(admin, userId);
+      return;
+  }
 }
