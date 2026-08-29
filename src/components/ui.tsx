@@ -105,6 +105,37 @@ export function FieldGroup({
   );
 }
 
+/**
+ * A checkbox that can say "some of these", which is the state a select-all control is in for
+ * most of the time anybody is using it.
+ *
+ * `indeterminate` is a DOM property rather than an attribute, so React cannot set it from
+ * JSX and it has to be written to the node. It is worth the ref: a header checkbox that
+ * shows only ticked or unticked tells a reader who has selected three rows out of ten that
+ * they have selected none, and the whole point of the control is to say how much is held.
+ */
+export function TriStateCheckbox({
+  checked,
+  indeterminate,
+  label,
+  onChange,
+}: {
+  checked: boolean;
+  indeterminate: boolean;
+  label: string;
+  onChange: () => void;
+}): ReactNode {
+  const ref = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate && !checked;
+  }, [checked, indeterminate]);
+
+  return (
+    <input ref={ref} type="checkbox" checked={checked} aria-label={label} onChange={onChange} />
+  );
+}
+
 export function Toolbar({ children }: { children: ReactNode }): ReactNode {
   return <div className="toolbar">{children}</div>;
 }

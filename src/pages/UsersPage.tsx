@@ -12,6 +12,7 @@ import {
   Modal,
   SuccessNotice,
   Toolbar,
+  TriStateCheckbox,
 } from '@/components/ui';
 import {
   lockout,
@@ -84,6 +85,7 @@ export function UsersPage(): ReactNode {
   const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
   const pageIds = result.items.map((user) => user.id);
   const allOnPageSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+  const someOnPageSelected = pageIds.some((id) => selected.has(id));
 
   function toggleOne(id: string): void {
     setSelectedIds((previous) =>
@@ -287,10 +289,10 @@ export function UsersPage(): ReactNode {
               {
                 label: 'Select',
                 header: (
-                  <input
-                    type="checkbox"
+                  <TriStateCheckbox
                     checked={allOnPageSelected}
-                    aria-label="Select every account on this page"
+                    indeterminate={someOnPageSelected}
+                    label="Select every account on this page"
                     onChange={togglePage}
                   />
                 ),

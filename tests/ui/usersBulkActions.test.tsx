@@ -49,6 +49,25 @@ describe('selecting accounts', () => {
     expect(screen.queryByRole('group', { name: 'Bulk actions' })).not.toBeInTheDocument();
   });
 
+  it('shows the header checkbox as partly ticked while some rows are selected', async () => {
+    const { user } = renderAsAdmin();
+    const selectAll = table().getByLabelText(
+      'Select every account on this page',
+    ) as HTMLInputElement;
+
+    expect(selectAll.indeterminate).toBe(false);
+
+    await user.click(table().getByLabelText('Select Dana Diaz'));
+    expect(selectAll.indeterminate).toBe(true);
+    expect(selectAll.checked).toBe(false);
+
+    // Partly ticked means "some": clicking it takes the whole page rather than clearing.
+    await user.click(selectAll);
+    expect(selectAll.indeterminate).toBe(false);
+    expect(selectAll.checked).toBe(true);
+    expect(bar().getByText('5 accounts selected')).toBeInTheDocument();
+  });
+
   it('drops the selection when the filters change', async () => {
     const { user } = renderAsAdmin();
 
