@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { useActor } from '@/app/sessionContext';
 import { useLiveQuery } from '@/app/store';
 import { DataTable, Pagination } from '@/components/DataTable';
@@ -24,6 +24,7 @@ import {
   type UserRole,
   type UserSortField,
 } from '@/domain';
+import { BulkActionBar } from '@/pages/users/BulkActionBar';
 import { downloadTextFile, toCsv } from '@/lib/csv';
 import { formatDate, formatDateTime } from '@/lib/format';
 
@@ -65,6 +66,7 @@ export function UsersPage(): ReactNode {
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exported, setExported] = useState<number | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const filters: UserFilters = {
     ...(search.trim() ? { search: search.trim() } : {}),
@@ -76,6 +78,31 @@ export function UsersPage(): ReactNode {
   };
 
   const result = useLiveQuery(() => users.listUsers(actor, { ...filters, page, pageSize: 10 }));
+
+  const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const pageIds = result.items.map((user) => user.id);
+  const allOnPageSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+
+  function toggleOne(id: string): void {
+    setSelectedIds((previous) =>
+      previous.includes(id) ? previous.filter((candidate) => candidate !== id) : [...previous, id],
+    );
+  }
+
+  /**
+   * The header checkbox covers the page in front of the reader rather than every account the
+   * filters match. Selecting rows nobody has seen is how a bulk delete goes wrong, and the
+   * page is the only set the screen can actually show while it is being acted on. Selections
+   * do carry across pages, so a reader can gather a batch from several of them; the bar
+   * always says how many are held.
+   */
+  function togglePage(): void {
+    setSelectedIds((previous) =>
+      allOnPageSelected
+        ? previous.filter((id) => !pageIds.includes(id))
+        : [...new Set([...previous, ...pageIds])],
+    );
+  }
 
   /**
    * Clicking the column already sorted on flips its direction; clicking a different one
@@ -95,11 +122,18 @@ export function UsersPage(): ReactNode {
     });
   }
 
+  /**
+   * Any change to the filters clears the selection. A held selection survives paging, since
+   * that is the same list seen a screen at a time — but narrowing the filters changes which
+   * accounts the list is about, and carrying a batch across that boundary would leave the
+   * reader holding accounts the screen can no longer show them.
+   */
   function changeFilter(apply: () => void): void {
     apply();
     setPage(1);
     setError(null);
     setExported(null);
+    setSelectedIds([]);
   }
 
   /**
@@ -222,12 +256,42 @@ export function UsersPage(): ReactNode {
           </SuccessNotice>
         )}
 
+        <BulkActionBar
+          selectedIds={selectedIds}
+          onClear={() => setSelectedIds([])}
+          onApplied={() => setSelectedIds([])}
+        />
+
         {result.items.length === 0 ? (
           <EmptyState>No accounts match these filters.</EmptyState>
         ) : (
-          <DataTable columns={COLUMNS} sort={{ key: sort, direction, onChange: changeSort }}>
+          <DataTable
+            columns={[
+              {
+                label: 'Select',
+                header: (
+                  <input
+                    type="checkbox"
+                    checked={allOnPageSelected}
+                    aria-label="Select every account on this page"
+                    onChange={togglePage}
+                  />
+                ),
+              },
+              ...COLUMNS,
+            ]}
+            sort={{ key: sort, direction, onChange: changeSort }}
+          >
             {result.items.map((user) => (
-              <tr key={user.id}>
+              <tr key={user.id} className={selected.has(user.id) ? 'is-selected' : undefined}>
+                <td className="cell--select">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(user.id)}
+                    aria-label={`Select ${user.displayName}`}
+                    onChange={() => toggleOne(user.id)}
+                  />
+                </td>
                 <td>{user.displayName}</td>
                 <td className="cell--muted">{user.email}</td>
                 <td>

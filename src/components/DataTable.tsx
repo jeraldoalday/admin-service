@@ -40,6 +40,12 @@ export function Pagination<T>({
 export interface TableColumn {
   label: string;
   sortKey?: string;
+  /**
+   * Rendered in place of the label when the header is a control rather than a word — a
+   * select-all checkbox, say. The label is still required and becomes the column's identity,
+   * so two such columns in one table stay distinguishable.
+   */
+  header?: ReactNode;
 }
 
 export interface TableSort {
@@ -63,6 +69,37 @@ const ARROWS = { asc: '\u2191', desc: '\u2193' } as const;
  * arrow alone says that only to somebody looking at it. Columns without a `sortKey` render
  * as plain headers, which is what an actions column wants.
  */
+/**
+ * One header's contents: a control when the column supplies one, a sort button when the
+ * column can be ordered by, and otherwise the bare label an actions column wants.
+ */
+function ColumnHeader({
+  column,
+  sort,
+  active,
+}: {
+  column: TableColumn;
+  sort: TableSort | undefined;
+  active: boolean;
+}): ReactNode {
+  if (column.header) return column.header;
+  if (!sort || !column.sortKey) return column.label;
+
+  const sortKey = column.sortKey;
+  return (
+    <button
+      type="button"
+      className={`table__sort${active ? ' is-active' : ''}`}
+      onClick={() => sort.onChange(sortKey)}
+    >
+      {column.label}
+      <span aria-hidden="true" className="table__sort-arrow">
+        {active ? ARROWS[sort.direction] : ''}
+      </span>
+    </button>
+  );
+}
+
 export function DataTable({
   columns,
   sort,
@@ -87,20 +124,7 @@ export function DataTable({
                     active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : undefined
                   }
                 >
-                  {sort && column.sortKey ? (
-                    <button
-                      type="button"
-                      className={`table__sort${active ? ' is-active' : ''}`}
-                      onClick={() => sort.onChange(column.sortKey as string)}
-                    >
-                      {column.label}
-                      <span aria-hidden="true" className="table__sort-arrow">
-                        {active ? ARROWS[sort.direction] : ''}
-                      </span>
-                    </button>
-                  ) : (
-                    column.label
-                  )}
+                  <ColumnHeader column={column} sort={sort} active={Boolean(active)} />
                 </th>
               );
             })}

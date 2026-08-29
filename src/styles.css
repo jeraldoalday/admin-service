@@ -432,6 +432,68 @@ a {
   letter-spacing: 0.04em;
 }
 
+/* The selection column is as narrow as a checkbox and nothing more: it sits to the left of
+   the name, where a reader's eye already starts, without pushing the data across. */
+.cell--select {
+  width: 1.75rem;
+  padding-right: 0;
+}
+
+.table tr.is-selected td {
+  background: var(--accent-bg);
+}
+
+/* --- bulk actions -------------------------------------------------------- */
+
+/* The bar only exists while something is selected, so it is allowed to be loud: it names the
+   size of the selection first and offers the actions second, which is the order somebody
+   checking a mis-click needs them in. */
+.bulk-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-bg);
+}
+
+.bulk-bar__count {
+  font-weight: 600;
+}
+
+.bulk-bar__actions {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.bulk-result {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.bulk-result__group {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.bulk-result__list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.88rem;
+}
+
+.bulk-result__who {
+  font-weight: 500;
+}
+
 .pagination {
   display: flex;
   align-items: center;

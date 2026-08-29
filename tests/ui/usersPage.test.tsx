@@ -187,12 +187,15 @@ describe('the edit dialog', () => {
   });
 });
 
-/** The visible order of the name column, which is what a reader actually sees. */
+/**
+ * The visible order of the name column, which is what a reader actually sees. The name is
+ * the second cell: the first is the selection checkbox the bulk actions read from.
+ */
 function namesInOrder(): string[] {
   return table()
     .getAllByRole('row')
     .slice(1)
-    .map((row) => row.querySelectorAll('td')[0]?.textContent ?? '');
+    .map((row) => row.querySelectorAll('td')[1]?.textContent ?? '');
 }
 
 describe('ordering the account list', () => {
