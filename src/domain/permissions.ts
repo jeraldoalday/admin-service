@@ -20,8 +20,13 @@ function mergePermissions(role: TeamRole, granted: TeamPermission[]): EffectiveP
   const rolePermissions = ROLE_DEFAULT_PERMISSIONS[role];
   return {
     role,
-    rolePermissions,
-    grantedPermissions: granted,
+    // Copied rather than handed out. `ROLE_DEFAULT_PERMISSIONS` is one shared array per role,
+    // and `hasTeamPermission` reads that very array on every permission check — so a caller
+    // that sorted, pushed to, or spliced the list it was given here would be editing the
+    // defaults for the whole console, from a value that looks like a read. Every other view
+    // in the domain copies its arrays out; this was the one that did not.
+    rolePermissions: [...rolePermissions],
+    grantedPermissions: [...granted],
     effectivePermissions: [...new Set([...rolePermissions, ...granted])],
   };
 }

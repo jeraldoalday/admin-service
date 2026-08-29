@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { audit, permissions, teams } from '@/domain';
+import { audit, permissions, teams, ROLE_DEFAULT_PERMISSIONS, type TeamPermission } from '@/domain';
 import { adminActor, danaActor, miraActor, rajActor, teamIdBySlug } from '../helpers';
 
 describe('effective permissions', () => {
@@ -123,5 +123,33 @@ describe('granting permissions', () => {
     expect(() => permissions.getEffectivePermissions(admin, platform, miraActor().id)).toThrow(
       'Team member not found',
     );
+  });
+});
+
+describe('the role defaults', () => {
+  it('are not handed out for a caller to edit', () => {
+    const owner = permissions.getEffectivePermissions(
+      adminActor(),
+      teamIdBySlug('platform'),
+      adminActor().id,
+    );
+
+    owner.rolePermissions.length = 0;
+    owner.effectivePermissions.length = 0;
+
+    // Reading a member's permissions must not be able to change what a role means.
+    const again = permissions.getEffectivePermissions(
+      adminActor(),
+      teamIdBySlug('platform'),
+      adminActor().id,
+    );
+    expect(again.rolePermissions).toHaveLength(5);
+    expect(again.effectivePermissions).toHaveLength(5);
+  });
+
+  it('cannot be edited through the constant either', () => {
+    expect(() => {
+      (ROLE_DEFAULT_PERMISSIONS.MEMBER as TeamPermission[]).push('MANAGE_TEAM');
+    }).toThrow();
   });
 });

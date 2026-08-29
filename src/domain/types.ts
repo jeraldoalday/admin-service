@@ -30,12 +30,17 @@ export const TEAM_PERMISSIONS: TeamPermission[] = [
  * Permissions every member of a role has by default, independent of any grants.
  * OWNER and ADMIN start out equally capable; team deletion stays a hardcoded OWNER-only
  * check and is deliberately not part of this permission set.
+ *
+ * Frozen because every permission check in the console reads these arrays directly: they are
+ * the definition of what a role means, and nothing should be able to edit that definition at
+ * runtime — least of all by accident, through a list it was handed by a read.
  */
-export const ROLE_DEFAULT_PERMISSIONS: Record<TeamRole, TeamPermission[]> = {
-  OWNER: [...TEAM_PERMISSIONS],
-  ADMIN: [...TEAM_PERMISSIONS],
-  MEMBER: [],
-};
+export const ROLE_DEFAULT_PERMISSIONS: Readonly<Record<TeamRole, readonly TeamPermission[]>> =
+  Object.freeze({
+    OWNER: Object.freeze([...TEAM_PERMISSIONS]),
+    ADMIN: Object.freeze([...TEAM_PERMISSIONS]),
+    MEMBER: Object.freeze([]),
+  });
 
 export type ApiKeyStatus = 'ACTIVE' | 'REVOKED' | 'EXPIRED';
 export const API_KEY_STATUSES: ApiKeyStatus[] = ['ACTIVE', 'REVOKED', 'EXPIRED'];
