@@ -50,7 +50,15 @@ export {
   emptyDatabase,
   STORAGE_KEY,
 } from './database';
-export { DEMO_ADMIN_EMAIL, DEMO_PASSWORD, buildSeedDatabase, seedDatabase } from './seed';
+export {
+  DEMO_ADMIN_EMAIL,
+  DEMO_PASSWORD,
+  DEMO_RECOVERY_CODES,
+  DEMO_TOTP_SECRET,
+  DEMO_TWO_FACTOR_EMAIL,
+  buildSeedDatabase,
+  seedDatabase,
+} from './seed';
 export * as auth from './auth';
 export * as users from './users';
 export * as teams from './teams';

@@ -3,12 +3,42 @@ import { createId, createToken } from './ids';
 import { hashPassword } from './password';
 import { SESSION_TTL_MS } from './sessions';
 import { INVITE_TTL_MS } from './teams';
+import { recoveryCodeHash } from './twoFactor';
 import type { SignInAttemptRecord, UserRecord, UserSessionRecord } from './types';
 
 /** Every seeded account shares this password so the demo is explorable without a handbook. */
 export const DEMO_PASSWORD = 'password123';
 
 export const DEMO_ADMIN_EMAIL = 'admin@example.com';
+
+/**
+ * The seeded account that already has an authenticator, and the key behind it.
+ *
+ * A demo where nobody has two-step verification turned on shows the feature only to
+ * somebody willing to set it up on their own phone first, which is a high price for
+ * looking at a screen. Publishing the key makes the second step explorable in the same
+ * spirit as publishing the password: this dataset is a fixture, not a secret, and the
+ * console says so on the sign-in card.
+ */
+export const DEMO_TWO_FACTOR_EMAIL = 'raj@example.com';
+export const DEMO_TOTP_SECRET = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP';
+
+/**
+ * The recovery codes that account was issued. One of them is already spent, since a set
+ * where every code is untouched never shows what a used one looks like.
+ */
+export const DEMO_RECOVERY_CODES = Object.freeze([
+  'H4KDM-2QW7T',
+  'R9XPZ-J3NC6',
+  'V2LTF-8MYB4',
+  'K7GRD-5HQXN',
+  'T3WJC-9PFML',
+  'B6NZQ-4RKTV',
+  'D8YMH-7XLGP',
+  'F5QCK-2VJRW',
+  'N4TBX-6ZHDM',
+  'P9RVL-3KWQY',
+] as const);
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MINUTE_MS = 60 * 1000;
@@ -113,6 +143,31 @@ export function buildSeedDatabase(now = Date.now()): Database {
     createdAt: at(7),
     updatedAt: at(7),
   });
+
+  // Raj arrives with two-step verification already on, so the account screen, the users
+  // column, and the second step at sign-in are all visible the moment the console opens.
+  db.twoFactor.push({
+    id: createId(),
+    userId: raj.id,
+    secret: DEMO_TOTP_SECRET,
+    confirmedAt: at(10),
+    // Left unset on purpose: the replay floor is a record of codes this console has
+    // accepted, and it has not accepted any yet. Seeding a step would refuse the first code
+    // somebody tries if their clock happened to sit behind the fixture's.
+    lastUsedStep: null,
+    createdAt: at(10),
+    updatedAt: at(10),
+  });
+
+  db.recoveryCodes.push(
+    ...DEMO_RECOVERY_CODES.map((code, index) => ({
+      id: createId(),
+      userId: raj.id,
+      codeHash: recoveryCodeHash(raj.id, code),
+      usedAt: index === 0 ? at(4) : null,
+      createdAt: at(10),
+    })),
+  );
 
   const minutesAgo = (minutes: number): string => new Date(now - minutes * MINUTE_MS).toISOString();
 

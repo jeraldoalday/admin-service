@@ -85,8 +85,12 @@ export function normalizeRecoveryCode(code: string): string {
  * precomputed table cannot cover the whole table. Recovery codes carry fifty bits and are
  * generated rather than chosen, so this is belt-and-braces — but it is the kind of
  * belt-and-braces that is free to put on now and impossible to retrofit later.
+ *
+ * Exported so the seed can write recovery code rows straight into the tables, the way it
+ * writes every other row — seeding through the domain functions would mean tripping over the
+ * very guards the demo data exists to demonstrate.
  */
-function recoveryCodeHash(userId: string, code: string): string {
+export function recoveryCodeHash(userId: string, code: string): string {
   return sha256Hex(`${userId}:${normalizeRecoveryCode(code)}`);
 }
 
