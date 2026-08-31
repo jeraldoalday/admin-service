@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEMO_RECOVERY_CODES,
   DEMO_TOTP_SECRET,
+  audit,
   auth,
   getDatabase,
   lockout,
@@ -145,6 +146,50 @@ describe('the code step', () => {
     expect(() =>
       auth.completeTwoFactorSignIn({ challengeId, code: totp.currentCode(DEMO_TOTP_SECRET) }),
     ).toThrow('That code is not right');
+  });
+});
+
+describe('a password change', () => {
+  it('closes an outstanding challenge the old password opened', () => {
+    const { challengeId } = challenge();
+
+    auth.changePassword(rajActor(), {
+      currentPassword: DEMO_PASSWORD,
+      newPassword: 'a-longer-secret',
+      confirmPassword: 'a-longer-secret',
+    });
+
+    expect(() =>
+      auth.completeTwoFactorSignIn({ challengeId, code: totp.currentCode(DEMO_TOTP_SECRET) }),
+    ).toThrow('That sign-in has expired');
+  });
+
+  it('says in the audit trail how many it closed', () => {
+    challenge();
+    challenge();
+    auth.changePassword(rajActor(), {
+      currentPassword: DEMO_PASSWORD,
+      newPassword: 'a-longer-secret',
+      confirmPassword: 'a-longer-secret',
+    });
+
+    expect(
+      audit.listAuditLogs({ action: 'user.password_changed' }).items.at(0)?.metadata,
+    ).toMatchObject({ discardedChallenges: 2 });
+  });
+
+  it('says nothing at all when there was nothing outstanding', () => {
+    // Raj has no open sessions in the seed either, so the entry carries no metadata rather
+    // than a pair of zeroes describing two things that did not happen.
+    auth.changePassword(rajActor(), {
+      currentPassword: DEMO_PASSWORD,
+      newPassword: 'a-longer-secret',
+      confirmPassword: 'a-longer-secret',
+    });
+
+    expect(
+      audit.listAuditLogs({ action: 'user.password_changed' }).items.at(0)?.metadata,
+    ).toBeNull();
   });
 });
 

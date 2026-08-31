@@ -220,6 +220,27 @@ export function completeTwoFactorSignIn(rawInput: TwoFactorChallengeInput): Publ
 }
 
 /**
+ * Drops every outstanding challenge an account has, and reports how many there were.
+ *
+ * A challenge is a five-minute promise that somebody knew the password. Once the password
+ * has changed, that promise is about a password that no longer opens anything, and honouring
+ * it would let whoever prompted the change finish signing in behind it.
+ */
+export function discardSignInChallengesForUser(userId: string): number {
+  const outstanding = getDatabase().signInChallenges.filter(
+    (challenge) => challenge.userId === userId && !challenge.consumedAt,
+  );
+  if (outstanding.length === 0) return 0;
+
+  const ids = new Set(outstanding.map((challenge) => challenge.id));
+  mutate((db) => {
+    db.signInChallenges = db.signInChallenges.filter((challenge) => !ids.has(challenge.id));
+  });
+
+  return outstanding.length;
+}
+
+/**
  * Drops the challenges that lapsed while nobody was looking, and reports how many.
  *
  * Reads already refuse a lapsed challenge, so nothing depends on this having run. What it
@@ -282,11 +303,12 @@ export function updateProfile(actor: Actor, rawInput: UpdateProfileInput): Publi
  * left open on a shared machine should not be enough to lock its owner out of the account.
  * The audit entry records that it happened and nothing about either password.
  *
- * Every other session the account has is ended by the change. Somebody changing a password
- * is very often changing it *because* they think somebody else has it, and a new password
- * that leaves the intruder's session untouched has not actually shut anyone out. The session
- * making the change is spared, since being signed out of the machine you are sitting at is
- * indistinguishable, from where you are sitting, from the change having failed.
+ * Every other session the account has is ended by the change, and so is any half-finished
+ * sign-in waiting on a code. Somebody changing a password is very often changing it
+ * *because* they think somebody else has it, and a new password that leaves the intruder's
+ * session — or their outstanding challenge — untouched has not actually shut anyone out. The
+ * session making the change is spared, since being signed out of the machine you are sitting
+ * at is indistinguishable, from where you are sitting, from the change having failed.
  */
 export function changePassword(actor: Actor, rawInput: ChangePasswordInput): PublicUser {
   const user = requireOwnAccount(actor);
@@ -306,12 +328,25 @@ export function changePassword(actor: Actor, rawInput: ChangePasswordInput): Pub
     exceptSessionId: actor?.sessionId,
   });
 
+  // A half-finished sign-in is the one door the session sweep above does not close. It was
+  // opened by the old password, it is not a session yet so nothing revokes it, and it stays
+  // answerable for another five minutes — which is exactly long enough for the person whose
+  // guessed password prompted this change to walk through it.
+  const discardedChallenges = discardSignInChallengesForUser(user.id);
+
   recordAuditLog({
     actorId: user.id,
     action: 'user.password_changed',
     targetType: 'user',
     targetId: user.id,
-    ...(revokedSessions > 0 ? { metadata: { revokedSessions } } : {}),
+    ...(revokedSessions > 0 || discardedChallenges > 0
+      ? {
+          metadata: {
+            ...(revokedSessions > 0 ? { revokedSessions } : {}),
+            ...(discardedChallenges > 0 ? { discardedChallenges } : {}),
+          },
+        }
+      : {}),
   });
 
   return updated;
