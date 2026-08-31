@@ -9,6 +9,7 @@ import {
   toErrorMessage,
   type SignInResult,
 } from '@/domain';
+import { DemoTwoFactorHint } from './signIn/DemoTwoFactorHint';
 import { TwoFactorStep } from './signIn/TwoFactorStep';
 
 type Mode = 'signin' | 'register';
@@ -105,6 +106,7 @@ export function SignInPage(): ReactNode {
             Demo data is seeded on first run. Sign in as <code>{DEMO_ADMIN_EMAIL}</code> with the
             password <code>{DEMO_PASSWORD}</code> — every seeded account shares it.
           </p>
+          <DemoTwoFactorHint />
         </aside>
       </div>
     </div>
