@@ -865,3 +865,22 @@ select:focus-visible,
     padding: 1.25rem;
   }
 }
+
+/* --- two-step verification ------------------------------------------------ */
+
+.recovery-codes {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 1rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  gap: 0.5rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-subtle);
+}
+
+.recovery-codes code {
+  font-size: 0.95rem;
+  letter-spacing: 0.06em;
+}

@@ -7,6 +7,7 @@ import { auth, teams, toErrorMessage } from '@/domain';
 import { formatDate } from '@/lib/format';
 import { SessionsCard } from './account/SessionsCard';
 import { SignInActivityCard } from './account/SignInActivityCard';
+import { TwoFactorCard } from './account/TwoFactorCard';
 
 /**
  * The screen an account manages itself from. Everything here is self-service: renaming,
@@ -64,6 +65,7 @@ export function AccountPage(): ReactNode {
 
       <ProfileForm displayName={user.displayName} />
       <PasswordForm />
+      <TwoFactorCard />
       <SessionsCard />
       <SignInActivityCard />
     </>
