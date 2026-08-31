@@ -331,7 +331,7 @@ hash that is subtly wrong makes codes that are consistently wrong, and from the 
 is indistinguishable from somebody typing them in badly.
 
 `npm run test:coverage` reports on the domain and app layers and fails below its thresholds —
-currently around 98.3% of statements and 93.1% of branches, with the thresholds set just under
+currently around 98.4% of statements and 94.0% of branches, with the thresholds set just under
 that so a real regression trips them and an ordinary refactor does not. `npm run check` runs
 lint, formatting, types, and that covered suite in one pass, which is exactly what CI runs.
 The screens are covered through the whole-app tests rather than by chasing a number.
