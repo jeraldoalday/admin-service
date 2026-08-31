@@ -32,7 +32,7 @@ export function AccountPage(): ReactNode {
     <>
       <PageHeader
         title="Account"
-        description="Your name, your password, and the devices signed in as you."
+        description="Your name, your password, two-step verification, and the devices signed in as you."
         actions={<Badge tone={user.role === 'ADMIN' ? 'accent' : 'neutral'}>{user.role}</Badge>}
       />
 

@@ -15,6 +15,7 @@ from `npm run dev` and the whole test suite runs from `npm test`.
 - **Storage**: in-memory tables persisted to `localStorage`; no database, no server
 - **Validation**: zod — the same schemas back the forms and the domain functions
 - **Passwords**: bcryptjs hashes; API key secrets are stored as SHA-256 digests
+- **Two-step**: RFC 6238 time-based codes, on a hand-written SHA-1/HMAC and base32, no dependencies
 - **Tests**: Vitest + Testing Library (jsdom), no credentials or external services required
 
 ## Getting started
@@ -26,8 +27,11 @@ npm run dev     # http://localhost:5173
 
 Demo data is seeded on first run. Sign in as `admin@example.com` — every seeded account
 shares the password `password123`, and none of them arrives locked — an account that did
-would be one nobody could explore for the first quarter of an hour. Everything you do persists to the browser; **Reset demo
-data** in the sidebar puts it back to the seeded dataset and signs you out.
+would be one nobody could explore for the first quarter of an hour. One seeded account, `raj@example.com`, arrives with two-step verification already
+turned on, and the sign-in card prints the code its authenticator is showing at that moment
+along with one of its unused recovery codes — so the second step is explorable without a
+phone. Everything you do persists to the browser; **Reset demo data** in the sidebar puts it
+back to the seeded dataset and signs you out.
 
 ## Scripts
 
@@ -50,7 +54,7 @@ data** in the sidebar puts it back to the seeded dataset and signs you out.
 | ----------------- | -------------- | ------------------------------------------------------------------------ |
 | `/sign-in`        | public         | Sign in or register; the first account ever created becomes an admin     |
 | `/`               | signed in      | Overview — your teams, and for admins the platform totals and activity   |
-| `/account`        | signed in      | Your name, your password, and the devices signed in as you               |
+| `/account`        | signed in      | Your name, your password, two-step verification, and your devices        |
 | `/teams`          | signed in      | Teams you belong to, and the form that creates one                       |
 | `/teams/:teamId`  | member         | One team: members, invites, API keys, activity, and settings             |
 | `/invites/:token` | signed in      | Accept an invite addressed to your account's email                       |
@@ -141,6 +145,64 @@ console was closed. A session the sweep settled still reads as expired rather th
 "Revoked" is the word somebody scanning the list for a device that is not theirs is looking
 for, so it is reserved for a session somebody actually ended.
 
+**Two-step verification** answers the one thing good password rules cannot. Passwords here
+are bcrypt-hashed, the form refuses to enumerate accounts, and five failures close an address
+off — and none of that helps against a password that was reused somewhere it should not have
+been, which is how administrator accounts are actually taken. Codes are RFC 6238 time-based
+ones: thirty-second steps, six digits, HMAC-SHA-1, computed by a SHA-1 and a base32 codec
+written out here for the same reason the SHA-256 is — `crypto.subtle` is asynchronous and
+absent from some of the environments the suite runs in. Those parameters are not preferences.
+They are what every authenticator assumes when a QR code does not spell them out, and an
+enrolment that differed would produce codes that are correct by the specification and
+rejected by the phone in front of the person enrolling.
+
+Enrolment is two steps because it has to be. The secret must be stored before the first code
+can be checked against it — the codes are derived from it, so there is nothing else to check
+against — but a stored secret that immediately started being required at sign-in would lock
+out everybody who scanned a code, put their phone down, and closed the tab. Nothing is
+enforced until a correct code proves that the phone and the console agree; until then the
+account reads as half set up, on screen and in the admin list alike. There is no QR code, and
+that is deliberate: a QR encoder is several hundred lines of error-correction tables that
+would have to be right, the setup key is the path every authenticator supports anyway, and
+the `otpauth://` link covers setting this up on the phone itself, where a camera is no use
+because the screen and the camera are the same device.
+
+Every code is single-use, by two mechanisms making the same promise. A time-based code moves
+a stored replay floor past its own step, so a code somebody read over a shoulder cannot be
+presented again inside the half-minute it stays mathematically valid; the newest matching
+step wins, so the floor moves forward rather than being pinned back by a code valid in two
+windows. A recovery code is stamped spent. Ten recovery codes are minted with the enrolment
+and shown exactly once, hashed with the account id mixed in — a per-account salt that costs
+nothing and means one precomputed table cannot span the table. Recovery codes are tried only
+after the time-based code has failed, so a six-digit collision cannot burn one, and the
+console records a spent one in the audit log on its own: somebody using one has lost their
+phone, and a run of them is either an account in trouble or an attacker working through a
+printout.
+
+Turning it off costs a password rather than a code, which is not a lowered bar but a
+different one. The threat a second factor answers is somebody else holding the password; the
+threat _this_ action answers is somebody else holding the session — a laptop left open — and
+only a password tells those apart. The person turning it off is also, usually, the one whose
+phone has just been replaced. An administrator can clear an authenticator from the users
+screen for the lost-phone-and-lost-codes case, because the alternative is an account nobody
+on the platform can open; what makes it safe enough to offer is that it is loud, naming them
+in the log and showing up on the account holder's own screen.
+
+**A sign-in with a second factor** is two requests, and the thing between them is a row rather
+than a claim the browser makes. A correct password against an enrolled account returns an
+unguessable challenge that names the account, expires in five minutes, and is consumed on
+use. It records no sign-in attempt: knowing the password is not signing in when a second
+factor is required, and an attempt logged as succeeding for somebody who never produced a
+code would tell the account holder, on their own security panel, that a sign-in happened
+which did not. The attempt is written when the sign-in resolves either way, which also puts
+code guessing under the same throttle as password guessing. The account is re-read when the
+challenge is answered, since five minutes is long enough for an administrator to have
+deactivated it; a wrong code leaves the challenge open so a typo is not fatal; and a password
+change discards every outstanding challenge, because a challenge the old password opened is
+a door the session sweep would otherwise leave ajar. The second step names no account at all
+— a challenge is handed out on a correct password, so a screen that said whose it was would
+turn a guess into confirmation.
+
 **Teams** are a self-service multi-tenancy layer, independent of the platform `role`: any
 signed-in user can create a team and becomes its `OWNER`. Team roles (`OWNER`/`ADMIN`/`MEMBER`)
 only mean something inside that team. A team always needs at least one owner — the last one
@@ -220,12 +282,14 @@ src/
   components/            Layout, table, and form primitives
   pages/                 One module per screen; team/ holds the team tabs
     AccountPage.tsx      Self-service name, password, and security
-    account/             The signed-in devices and sign-in history cards
+    account/             The devices, the sign-in history, and the two-step panel
+    signIn/              The second step, and the demo's own authenticator code
     users/               The batch action bar and the CSV import dialog
     team/ActivityTab.tsx One team's slice of the audit log
   lib/
     format.ts            Date and permission formatting
     csv.ts               RFC 4180 serialisation, both directions
+    base32.ts            RFC 4648, the alphabet an authenticator expects a secret in
     device.ts            A readable name for the browser a session was opened from
   domain/
     types.ts             Entities, roles, permissions, role defaults
@@ -234,6 +298,8 @@ src/
     auth.ts users.ts teams.ts permissions.ts apiKeys.ts audit.ts
     userImport.ts        Reading a list of accounts in from a file
     sessions.ts          Signed-in sessions: opening, resolving, revoking, sweeping
+    twoFactor.ts         Enrolment, recovery codes, and spending a code exactly once
+    totp.ts sha1.ts      RFC 6238 codes, on a synchronous SHA-1 and HMAC
     lockout.ts           Sign-in attempts and the throttle derived from them
     service.ts           The machine-facing, API-key-authenticated surface
     seed.ts              Demo dataset
@@ -256,6 +322,13 @@ files, no network, and no browser storage, and no test can leak state into the n
 tests mount the real application — real routes, real session provider, real domain layer — and
 drive it the way a person would; nothing is mocked. The SHA-256 implementation is checked
 against `node:crypto` directly, since API key lookup depends on the two agreeing.
+
+The one-time password primitives are checked against something outside this repository too:
+base32 against the RFC 4648 vectors, SHA-1 and HMAC-SHA-1 against `node:crypto` either side
+of the block boundary, and the codes against the RFC 6238 vectors — including the one past
+2^31 seconds, where a counter built from bitwise operations quietly loses its high bits. A
+hash that is subtly wrong makes codes that are consistently wrong, and from the outside that
+is indistinguishable from somebody typing them in badly.
 
 `npm run test:coverage` reports on the domain and app layers and fails below its thresholds —
 currently around 98.3% of statements and 93.1% of branches, with the thresholds set just under
