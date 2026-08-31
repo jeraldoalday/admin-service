@@ -39,9 +39,17 @@ export function TwoFactorCard(): ReactNode {
   const [enrolment, setEnrolment] = useState<TwoFactorEnrolmentView | null>(null);
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Held here rather than inside the panel that raises it. Turning two-step verification off
+   * changes the card's status, which swaps that panel out for the "set this up" one — so a
+   * confirmation owned by the panel unmounts in the same render that earns it, and the
+   * screen simply goes back to looking as though nothing happened.
+   */
+  const [notice, setNotice] = useState<string | null>(null);
 
   function begin(): void {
     setError(null);
+    setNotice(null);
     setRecoveryCodes(null);
     try {
       setEnrolment(twoFactor.beginTwoFactorEnrolment(actor));
@@ -57,6 +65,7 @@ export function TwoFactorCard(): ReactNode {
       actions={<Badge tone={STATUS_TONE[state.status]}>{STATUS_LABEL[state.status]}</Badge>}
     >
       <ErrorNotice error={error} />
+      {notice && <SuccessNotice>{notice}</SuccessNotice>}
 
       {recoveryCodes ? (
         <RecoveryCodePanel codes={recoveryCodes} onDone={() => setRecoveryCodes(null)} />
@@ -76,6 +85,7 @@ export function TwoFactorCard(): ReactNode {
           total={state.totalRecoveryCodes}
           onCodes={setRecoveryCodes}
           onError={setError}
+          onNotice={setNotice}
         />
       ) : (
         <>
@@ -231,17 +241,18 @@ function EnabledPanel({
   total,
   onCodes,
   onError,
+  onNotice,
 }: {
   confirmedAt: string | null;
   remaining: number;
   total: number;
   onCodes: (codes: string[]) => void;
   onError: (message: string | null) => void;
+  onNotice: (message: string | null) => void;
 }): ReactNode {
   const actor = useActor();
   const [intent, setIntent] = useState<'regenerate' | 'disable' | null>(null);
   const [password, setPassword] = useState('');
-  const [disabled, setDisabled] = useState(false);
 
   function handleSubmit(event: FormEvent): void {
     event.preventDefault();
@@ -251,7 +262,9 @@ function EnabledPanel({
         onCodes(twoFactor.regenerateRecoveryCodes(actor, { password }).recoveryCodes);
       } else {
         twoFactor.disableTwoFactor(actor, { password });
-        setDisabled(true);
+        onNotice(
+          'Two-step verification is off, and the recovery codes that went with it no longer work.',
+        );
       }
       setIntent(null);
       setPassword('');
@@ -263,12 +276,6 @@ function EnabledPanel({
 
   return (
     <>
-      {disabled && (
-        <SuccessNotice>
-          Two-step verification is off, and the recovery codes that went with it no longer work.
-        </SuccessNotice>
-      )}
-
       <ul className="list">
         <li className="list__row">
           <span className="list__primary">Turned on</span>
@@ -329,7 +336,7 @@ function EnabledPanel({
             className="button"
             onClick={() => {
               setIntent('regenerate');
-              setDisabled(false);
+              onNotice(null);
               onError(null);
             }}
           >
@@ -340,7 +347,7 @@ function EnabledPanel({
             className="button button--ghost"
             onClick={() => {
               setIntent('disable');
-              setDisabled(false);
+              onNotice(null);
               onError(null);
             }}
           >
