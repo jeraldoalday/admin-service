@@ -14,6 +14,7 @@ export type {
   ListApiKeysQuery,
   ListAuditLogsQuery,
   ListInvitesQuery,
+  ConfirmTwoFactorInput,
   ListSessionsQuery,
   ListSignInAttemptsQuery,
   ListUsersQuery,
@@ -21,6 +22,8 @@ export type {
   RegisterInput,
   SetMemberPermissionsInput,
   SortDirection,
+  TwoFactorChallengeInput,
+  TwoFactorPasswordInput,
   UpdateProfileInput,
   UpdateTeamInput,
   UpdateUserInput,
@@ -57,6 +60,8 @@ export * as audit from './audit';
 export * as lockout from './lockout';
 export * as sessions from './sessions';
 export * as service from './service';
+export * as twoFactor from './twoFactor';
+export * as totp from './totp';
 export * as userImport from './userImport';
 export type {
   ImportedAccount,

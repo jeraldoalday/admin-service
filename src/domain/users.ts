@@ -7,6 +7,7 @@ import { lockStateFor, unlockAccount } from './lockout';
 import { paginate, sortNewestFirst, type PaginatedResult } from './pagination';
 import { deleteSessionsForUser, revokeSessionsForUser } from './sessions';
 import { reassignTeamsOwnedSolelyBy } from './teams';
+import { deleteTwoFactorForUser } from './twoFactor';
 import type {
   AdminUserView,
   BulkUserAction,
@@ -212,6 +213,11 @@ export function deleteUser(actor: Actor, id: string): void {
   // stay — they are addressed to an email, and a run of failures against an address is worth
   // keeping precisely when the account behind it has just been removed.
   deleteSessionsForUser(id);
+
+  // The authenticator and its recovery codes go the same way and for the same reason: they
+  // are rows keyed to a user id nobody holds any more, and a live recovery code belonging to
+  // no account is the one kind of leftover that could still be used for something.
+  deleteTwoFactorForUser(id);
 
   recordAuditLog({
     actorId: admin.id,

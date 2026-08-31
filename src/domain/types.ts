@@ -451,8 +451,8 @@ export interface SignInChallengeRecord {
 export interface TwoFactorView {
   status: TwoFactorStatus;
   confirmedAt: string | null;
-  recoveryCodesRemaining: number;
-  recoveryCodesTotal: number;
+  remainingRecoveryCodes: number;
+  totalRecoveryCodes: number;
 }
 
 /**
