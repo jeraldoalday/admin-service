@@ -7,7 +7,7 @@ import { lockStateFor, unlockAccount } from './lockout';
 import { paginate, sortNewestFirst, type PaginatedResult } from './pagination';
 import { deleteSessionsForUser, revokeSessionsForUser } from './sessions';
 import { reassignTeamsOwnedSolelyBy } from './teams';
-import { deleteTwoFactorForUser } from './twoFactor';
+import { deleteTwoFactorForUser, twoFactorStatusFor } from './twoFactor';
 import type {
   AdminUserView,
   BulkUserAction,
@@ -41,6 +41,7 @@ function toAdminUserView(user: UserRecord): AdminUserView {
     isActive,
     isLocked: lock.isLocked,
     lockedUntil: lock.lockedUntil,
+    hasTwoFactor: twoFactorStatusFor(id) === 'ENABLED',
     createdAt,
     updatedAt,
   };
@@ -50,6 +51,7 @@ interface ParsedFilters {
   role?: 'ADMIN' | 'MEMBER' | undefined;
   isActive?: boolean | undefined;
   isLocked?: boolean | undefined;
+  hasTwoFactor?: boolean | undefined;
   search?: string | undefined;
   sort: UserSortField;
   direction: SortDirection;
@@ -93,6 +95,12 @@ function matchesFilters(user: UserRecord, filters: ParsedFilters): boolean {
   if (filters.role && user.role !== filters.role) return false;
   if (filters.isActive !== undefined && user.isActive !== filters.isActive) return false;
   if (filters.isLocked !== undefined && lockStateFor(user.email).isLocked !== filters.isLocked) {
+    return false;
+  }
+  if (
+    filters.hasTwoFactor !== undefined &&
+    (twoFactorStatusFor(user.id) === 'ENABLED') !== filters.hasTwoFactor
+  ) {
     return false;
   }
 

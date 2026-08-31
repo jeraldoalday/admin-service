@@ -17,6 +17,7 @@ import {
 import {
   lockout,
   toErrorMessage,
+  twoFactor,
   users,
   type AdminUserView,
   type SortDirection,
@@ -32,6 +33,7 @@ import { formatDate, formatDateTime } from '@/lib/format';
 
 type ActiveFilter = 'all' | 'true' | 'false';
 type LockFilter = 'all' | 'true' | 'false';
+type TwoFactorFilter = 'all' | 'true' | 'false';
 
 /**
  * The direction a column starts in when it is first clicked. Dates open newest-first, since
@@ -50,6 +52,7 @@ const COLUMNS = [
   { label: 'Email', sortKey: 'email' },
   { label: 'Role', sortKey: 'role' },
   { label: 'Status' },
+  { label: 'Two-step' },
   { label: 'Joined', sortKey: 'createdAt' },
   { label: '' },
 ];
@@ -62,10 +65,12 @@ export function UsersPage(): ReactNode {
   const [role, setRole] = useState<'all' | UserRole>('all');
   const [isActive, setIsActive] = useState<ActiveFilter>('all');
   const [isLocked, setIsLocked] = useState<LockFilter>('all');
+  const [hasTwoFactor, setHasTwoFactor] = useState<TwoFactorFilter>('all');
   const [sort, setSort] = useState<UserSortField>('createdAt');
   const [direction, setDirection] = useState<SortDirection>('desc');
   const [editing, setEditing] = useState<AdminUserView | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [resetTwoFactor, setResetTwoFactor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exported, setExported] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -76,6 +81,7 @@ export function UsersPage(): ReactNode {
     ...(role === 'all' ? {} : { role }),
     ...(isActive === 'all' ? {} : { isActive: isActive === 'true' }),
     ...(isLocked === 'all' ? {} : { isLocked: isLocked === 'true' }),
+    ...(hasTwoFactor === 'all' ? {} : { hasTwoFactor: hasTwoFactor === 'true' }),
     sort,
     direction,
   };
@@ -138,6 +144,7 @@ export function UsersPage(): ReactNode {
     setError(null);
     setExported(null);
     setSelectedIds([]);
+    setResetTwoFactor(null);
   }
 
   /**
@@ -156,6 +163,7 @@ export function UsersPage(): ReactNode {
         { header: 'Role', value: (row) => row.role },
         { header: 'Status', value: (row) => (row.isActive ? 'Active' : 'Deactivated') },
         { header: 'Locked until', value: (row) => row.lockedUntil ?? '' },
+        { header: 'Two-step', value: (row) => (row.hasTwoFactor ? 'On' : 'Off') },
         { header: 'Joined', value: (row) => row.createdAt },
         { header: 'Updated', value: (row) => row.updatedAt },
       ]);
@@ -177,6 +185,23 @@ export function UsersPage(): ReactNode {
     setError(null);
     try {
       lockout.unlockAccount(actor, id);
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+    }
+  }
+
+  /**
+   * Takes an authenticator off an account whose owner can no longer reach it — the lost
+   * phone with the recovery codes in the same bag. It has to exist: the alternative is an
+   * account nobody on the platform can open. The domain writes an entry naming the
+   * administrator who did it, and the account holder sees it gone on their own screen, which
+   * is what keeps a quiet reset from being possible.
+   */
+  function handleResetTwoFactor(id: string): void {
+    setError(null);
+    try {
+      twoFactor.disableTwoFactorForUser(actor, id);
+      setResetTwoFactor(null);
     } catch (caught) {
       setError(toErrorMessage(caught));
     }
@@ -260,6 +285,18 @@ export function UsersPage(): ReactNode {
               <option value="false">Not locked</option>
             </select>
           </Field>
+          <Field label="Two-step">
+            <select
+              value={hasTwoFactor}
+              onChange={(event) =>
+                changeFilter(() => setHasTwoFactor(event.target.value as TwoFactorFilter))
+              }
+            >
+              <option value="all">Any</option>
+              <option value="true">Set up</option>
+              <option value="false">Password only</option>
+            </select>
+          </Field>
         </Toolbar>
 
         <ErrorNotice error={error} />
@@ -328,6 +365,11 @@ export function UsersPage(): ReactNode {
                     </>
                   )}
                 </td>
+                <td>
+                  <Badge tone={user.hasTwoFactor ? 'positive' : 'neutral'}>
+                    {user.hasTwoFactor ? 'On' : 'Off'}
+                  </Badge>
+                </td>
                 <td className="cell--muted">{formatDate(user.createdAt)}</td>
                 <td className="cell--actions">
                   <button
@@ -349,6 +391,36 @@ export function UsersPage(): ReactNode {
                       Unlock
                     </button>
                   )}
+                  {user.hasTwoFactor &&
+                    (resetTwoFactor === user.id ? (
+                      <>
+                        <button
+                          type="button"
+                          className="button button--danger"
+                          onClick={() => handleResetTwoFactor(user.id)}
+                        >
+                          Confirm reset
+                        </button>
+                        <button
+                          type="button"
+                          className="button button--ghost"
+                          onClick={() => setResetTwoFactor(null)}
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className="button button--ghost"
+                        onClick={() => {
+                          setResetTwoFactor(user.id);
+                          setError(null);
+                        }}
+                      >
+                        Reset two-step
+                      </button>
+                    ))}
                   {pendingDelete === user.id ? (
                     <>
                       <button

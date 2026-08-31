@@ -222,6 +222,12 @@ export interface AdminUserView extends PublicUser {
   isActive: boolean;
   isLocked: boolean;
   lockedUntil: string | null;
+  /**
+   * Whether a *confirmed* authenticator stands behind this account. A half-finished
+   * enrolment reads as false here, because the column is answering "is this account harder
+   * to take than its password?" and a secret nobody ever proved a code against is not.
+   */
+  hasTwoFactor: boolean;
   updatedAt: string;
 }
 

@@ -134,6 +134,9 @@ const userFilterFields = {
   // Locked is a state an account is in rather than a flag it carries, so it filters like one
   // — the question "who cannot currently sign in?" is asked of the list, not of the row.
   isLocked: z.boolean().optional(),
+  // "Which administrators are still on a password alone?" is the question this list exists
+  // to be able to answer, and it is a poor one to have to answer by reading every row.
+  hasTwoFactor: z.boolean().optional(),
   search: z.string().trim().min(1).max(200).optional(),
 };
 
