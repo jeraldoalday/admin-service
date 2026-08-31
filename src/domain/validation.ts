@@ -80,6 +80,52 @@ export const changePasswordSchema = z
   });
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 
+// -- two-factor authentication ---------------------------------------------
+
+/**
+ * A code, whichever kind it is.
+ *
+ * Six digits from an authenticator and a longer recovery code both arrive through this one
+ * field, because the person typing has one box in front of them and knows which of the two
+ * they are holding. Telling them apart is the domain's job — a form that made somebody
+ * choose first would be asking them to classify their own emergency.
+ *
+ * The cap is generous and the shape is deliberately unconstrained here: rejecting a
+ * malformed code with a validation error would say "that is not a recovery code" to somebody
+ * who mistyped one, and the whole point of the verifier is that a wrong code and a wrong kind
+ * of code get the same answer.
+ */
+export const twoFactorCodeSchema = z
+  .string()
+  .trim()
+  .min(1, 'Enter the code from your authenticator')
+  .max(40, 'Enter the code from your authenticator');
+
+export const confirmTwoFactorSchema = z.object({ code: twoFactorCodeSchema });
+export type ConfirmTwoFactorInput = z.infer<typeof confirmTwoFactorSchema>;
+
+export const twoFactorChallengeSchema = z.object({
+  challengeId: z.string().trim().min(1, 'Start again from the sign-in form'),
+  code: twoFactorCodeSchema,
+});
+export type TwoFactorChallengeInput = z.infer<typeof twoFactorChallengeSchema>;
+
+/**
+ * Turning an authenticator off, and minting a fresh set of recovery codes, both cost a
+ * password.
+ *
+ * Deliberately a password rather than a current code. The threat a second factor answers is
+ * somebody else holding the password; the threat *these* two actions answer is somebody else
+ * holding the session — a laptop left open — and a code does not distinguish those, while a
+ * password does. It is also the case that the person most likely to be turning this off is
+ * the one whose phone has just been replaced, and demanding the phone would leave them with
+ * nobody to ask but an administrator.
+ */
+export const twoFactorPasswordSchema = z.object({
+  password: z.string().min(1, 'Your password is required'),
+});
+export type TwoFactorPasswordInput = z.infer<typeof twoFactorPasswordSchema>;
+
 // -- users -----------------------------------------------------------------
 
 const userFilterFields = {
