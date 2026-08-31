@@ -377,3 +377,113 @@ export interface AuditLogView {
   metadata: Record<string, unknown> | null;
   createdAt: string;
 }
+
+// -- two-factor authentication ---------------------------------------------
+
+/**
+ * Where an account is in the enrolment.
+ *
+ * PENDING is a real state rather than an implementation detail: a secret is generated the
+ * moment somebody asks to set an authenticator up, and it has to be stored — the codes are
+ * derived from it, so there is nothing to check the first code against otherwise. What it
+ * must not do in the meantime is start being required at sign-in. Somebody who scans a QR
+ * code, puts their phone down, and closes the tab has not enrolled, and locking them out on
+ * the strength of a secret they never confirmed is the way this feature does real damage.
+ */
+export const TWO_FACTOR_STATUSES = Object.freeze(['DISABLED', 'PENDING', 'ENABLED'] as const);
+export type TwoFactorStatus = (typeof TWO_FACTOR_STATUSES)[number];
+
+/**
+ * One account's authenticator.
+ *
+ * `lastUsedStep` is the replay floor. A code is good for the whole thirty-second window it
+ * names, so one that has been used is one somebody reading over a shoulder could use again
+ * before it lapses; remembering the newest step accepted and refusing anything at or below
+ * it closes that window to a single use. It is stored rather than derived because there is
+ * nothing to derive it from — a code leaves no other trace.
+ */
+export interface TwoFactorRecord {
+  id: string;
+  userId: string;
+  /** The shared secret, base32 as every authenticator expects it. */
+  secret: string;
+  /** When the first correct code proved the phone and the console agree. Null while pending. */
+  confirmedAt: string | null;
+  lastUsedStep: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * One single-use code for the day the phone is lost.
+ *
+ * Stored as a SHA-256 digest, exactly as an API key secret is: the console can check a code
+ * it is given without being able to hand the list back, which is what makes "write these
+ * down now" an honest instruction rather than a formality. A used code keeps its row with a
+ * timestamp rather than being deleted, so somebody can see that one was spent and when.
+ */
+export interface RecoveryCodeRecord {
+  id: string;
+  userId: string;
+  codeHash: string;
+  usedAt: string | null;
+  createdAt: string;
+}
+
+/**
+ * A sign-in that has passed the password and still owes a second factor.
+ *
+ * It exists as a row because the alternative is the browser holding "I got the password
+ * right, honestly" and the console believing it. The challenge names the account, nothing
+ * about it is guessable, it expires in minutes rather than days, and it is consumed on use —
+ * so the thing standing between a correct password and a session is a record the domain
+ * controls rather than a claim the client makes.
+ */
+export interface SignInChallengeRecord {
+  id: string;
+  userId: string;
+  expiresAt: string;
+  consumedAt: string | null;
+  createdAt: string;
+}
+
+/** What the account screen shows about its own authenticator. The secret is never part of it. */
+export interface TwoFactorView {
+  status: TwoFactorStatus;
+  confirmedAt: string | null;
+  recoveryCodesRemaining: number;
+  recoveryCodesTotal: number;
+}
+
+/**
+ * What somebody needs in order to add the account to their authenticator: the secret to
+ * scan, the same secret grouped for typing when a camera is not an option, and the URI the
+ * QR code encodes. Handed out only to the account holder, and only while enrolling.
+ */
+export interface TwoFactorEnrolmentView {
+  secret: string;
+  /** The same secret in groups of four, for somebody typing it in by hand. */
+  formattedSecret: string;
+  otpauthUri: string;
+}
+
+/**
+ * The result of confirming an enrolment: the new state, and the recovery codes, in plaintext,
+ * for the only time they will ever be readable.
+ */
+export interface TwoFactorActivationView {
+  twoFactor: TwoFactorView;
+  recoveryCodes: string[];
+}
+
+/**
+ * How a sign-in ended, for a caller that has to know whether to open a session or ask for
+ * one more thing.
+ *
+ * It is a discriminated union rather than a user-or-null, because "here is your account" and
+ * "prove it again" are different enough that a caller should not be able to confuse them by
+ * forgetting a null check.
+ */
+export type SignInResult =
+  | { kind: 'COMPLETE'; user: PublicUser }
+  | { kind: 'TWO_FACTOR_REQUIRED'; challengeId: string; expiresAt: string };

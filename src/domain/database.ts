@@ -1,11 +1,14 @@
 import type {
   ApiKeyRecord,
   AuditLogRecord,
+  RecoveryCodeRecord,
   SignInAttemptRecord,
+  SignInChallengeRecord,
   TeamInviteRecord,
   TeamMembershipRecord,
   TeamPermissionGrantRecord,
   TeamRecord,
+  TwoFactorRecord,
   UserRecord,
   UserSessionRecord,
 } from './types';
@@ -25,6 +28,9 @@ export interface Database {
   apiKeys: ApiKeyRecord[];
   sessions: UserSessionRecord[];
   signInAttempts: SignInAttemptRecord[];
+  twoFactor: TwoFactorRecord[];
+  recoveryCodes: RecoveryCodeRecord[];
+  signInChallenges: SignInChallengeRecord[];
   auditLogs: AuditLogRecord[];
 }
 
@@ -35,8 +41,12 @@ export interface Database {
  * seeded data is the honest trade: a half-migrated audit trail would be worse than a fresh
  * one, and a half-migrated session table would sign people in on evidence it cannot vouch
  * for.
+ *
+ * And to 4 when sign-in grew a second factor. A stored database from before it has no
+ * authenticators to migrate, but it also has no table to put one in, and adding the table on
+ * read would mean a half-described database walking around claiming to be whole.
  */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 export const STORAGE_KEY = 'admin-service:db';
 
 export function emptyDatabase(): Database {
@@ -50,6 +60,9 @@ export function emptyDatabase(): Database {
     apiKeys: [],
     sessions: [],
     signInAttempts: [],
+    twoFactor: [],
+    recoveryCodes: [],
+    signInChallenges: [],
     auditLogs: [],
   };
 }
@@ -119,6 +132,9 @@ function isDatabase(value: unknown): value is Database {
     Array.isArray(candidate.apiKeys) &&
     Array.isArray(candidate.sessions) &&
     Array.isArray(candidate.signInAttempts) &&
+    Array.isArray(candidate.twoFactor) &&
+    Array.isArray(candidate.recoveryCodes) &&
+    Array.isArray(candidate.signInChallenges) &&
     Array.isArray(candidate.auditLogs)
   );
 }
