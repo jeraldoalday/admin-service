@@ -66,6 +66,17 @@ export function codeForStep(secret: string, counter: number, digits = TOTP_DIGIT
   return (binary % 10 ** digits).toString().padStart(digits, '0');
 }
 
+/**
+ * How much longer the code on screen has, for a display that wants to say so.
+ *
+ * It lives here, next to the period it divides by, rather than beside the caller that needs
+ * it: a countdown computed from a hardcoded thirty is a second description of the window,
+ * and the two would drift the first time anybody changed the period.
+ */
+export function secondsUntilNextCode(now = Date.now(), period = TOTP_PERIOD_SECONDS): number {
+  return period - (Math.floor(now / 1000) % period);
+}
+
 /** The code an authenticator would be showing right now. */
 export function currentCode(secret: string, now = Date.now()): string {
   return codeForStep(secret, timeStepAt(now));

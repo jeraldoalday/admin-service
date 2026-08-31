@@ -5,7 +5,7 @@ import { requireActor, requireAdmin, type Actor } from './guards';
 import { createId, nowIso } from './ids';
 import { verifyPassword } from './password';
 import { sha256Hex } from './sha256';
-import { otpauthUri, timeStepAt, verifyCode } from './totp';
+import { otpauthUri, verifyCode } from './totp';
 import type {
   RecoveryCodeRecord,
   TwoFactorActivationView,
@@ -443,9 +443,4 @@ export function consumeTwoFactorCode(
   });
 
   return 'RECOVERY_CODE';
-}
-
-/** The current time step, for a screen that wants to say how long a code has left. */
-export function secondsUntilNextCode(now = Date.now()): number {
-  return 30 - Math.floor(now / 1000) + timeStepAt(now) * 30;
 }

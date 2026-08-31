@@ -5,6 +5,7 @@ import {
   currentCode,
   normalizeCode,
   otpauthUri,
+  secondsUntilNextCode,
   timeStepAt,
   verifyCode,
 } from '@/domain/totp';
@@ -88,6 +89,24 @@ describe('verifyCode', () => {
 
   it('agrees with what an authenticator would be showing now', () => {
     expect(verifyCode(SECRET, currentCode(SECRET))).not.toBeNull();
+  });
+});
+
+describe('secondsUntilNextCode', () => {
+  it('counts down to the boundary the step moves on', () => {
+    const base = 1_700_000_010_000;
+
+    expect(secondsUntilNextCode(base)).toBe(TOTP_PERIOD_SECONDS);
+    expect(secondsUntilNextCode(base + 29_000)).toBe(1);
+    expect(secondsUntilNextCode(base + 30_000)).toBe(TOTP_PERIOD_SECONDS);
+  });
+
+  it('never disagrees with the step it is counting down to', () => {
+    const base = 1_700_000_017_000;
+    const crossing = base + secondsUntilNextCode(base) * 1000;
+
+    expect(timeStepAt(crossing)).toBe(timeStepAt(base) + 1);
+    expect(timeStepAt(crossing - 1)).toBe(timeStepAt(base));
   });
 });
 

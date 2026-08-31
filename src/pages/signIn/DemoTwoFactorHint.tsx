@@ -25,14 +25,12 @@ export function DemoTwoFactorHint(): ReactNode {
     return () => clearInterval(timer);
   }, []);
 
-  const secondsLeft =
-    totp.TOTP_PERIOD_SECONDS - (Math.floor(now / 1000) % totp.TOTP_PERIOD_SECONDS);
-
   return (
     <p>
       <code>{DEMO_TWO_FACTOR_EMAIL}</code> has two-step verification turned on. Its authenticator is
-      showing <code>{totp.currentCode(DEMO_TOTP_SECRET, now)}</code> for another {secondsLeft}s, and{' '}
-      <code>{DEMO_RECOVERY_CODES[1]}</code> is one of its unused recovery codes.
+      showing <code>{totp.currentCode(DEMO_TOTP_SECRET, now)}</code> for another{' '}
+      {totp.secondsUntilNextCode(now)}s, and <code>{DEMO_RECOVERY_CODES[1]}</code> is one of its
+      unused recovery codes.
     </p>
   );
 }
