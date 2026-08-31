@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { auth, sessions, type PublicUser } from '@/domain';
+import { auth, sessions, type PublicUser, type SignInResult } from '@/domain';
 import { describeDevice } from '@/lib/device';
 import { SessionContext, type SessionContextValue } from './sessionContext';
 import { useLiveQuery } from './store';
@@ -87,9 +87,24 @@ export function SessionProvider({
     writeStoredSessionId(opened.id);
   }, []);
 
+  /**
+   * A password alone no longer necessarily opens a session. When the account has an
+   * authenticator, the domain hands back a challenge instead of an account and no session is
+   * opened here — the browser is holding a five-minute promise that somebody knew the
+   * password, which is not the same thing as being signed in and must not be stored like it.
+   */
   const signIn = useCallback(
-    (email: string, password: string): PublicUser => {
-      const signedIn = auth.loginUser({ email, password });
+    (email: string, password: string): SignInResult => {
+      const result = auth.loginUser({ email, password });
+      if (result.kind === 'COMPLETE') openSession(result.user.id);
+      return result;
+    },
+    [openSession],
+  );
+
+  const completeTwoFactor = useCallback(
+    (challengeId: string, code: string): PublicUser => {
+      const signedIn = auth.completeTwoFactorSignIn({ challengeId, code });
       openSession(signedIn.id);
       return signedIn;
     },
@@ -119,10 +134,11 @@ export function SessionProvider({
       sessionId,
       actor: user ? { id: user.id, role: user.role, ...(sessionId ? { sessionId } : {}) } : null,
       signIn,
+      completeTwoFactor,
       register,
       signOut,
     }),
-    [user, sessionId, signIn, register, signOut],
+    [user, sessionId, signIn, completeTwoFactor, register, signOut],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

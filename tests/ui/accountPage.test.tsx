@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import { auth } from '@/domain';
-import { danaActor, DEMO_PASSWORD } from '../helpers';
+import { danaActor, DEMO_PASSWORD, signInFully } from '../helpers';
 import { renderApp } from '../renderApp';
 
 function openAccount() {
@@ -53,9 +53,7 @@ describe('the account screen', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('password has been changed');
     expect(screen.getByLabelText('Current password')).toHaveValue('');
     expect(screen.getByLabelText('New password')).toHaveValue('');
-    expect(auth.loginUser({ email: 'dana@example.com', password: 'a-longer-secret' }).id).toBe(
-      danaActor().id,
-    );
+    expect(signInFully('dana@example.com', 'a-longer-secret').id).toBe(danaActor().id);
   });
 
   it('refuses the change when the current password is wrong', async () => {

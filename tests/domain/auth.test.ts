@@ -8,7 +8,7 @@ import {
   replaceDatabase,
   users,
 } from '@/domain';
-import { DEMO_PASSWORD, adminActor } from '../helpers';
+import { DEMO_PASSWORD, adminActor, signInFully } from '../helpers';
 
 describe('registration', () => {
   it('creates an account and returns it without the password hash', () => {
@@ -92,7 +92,7 @@ describe('registration', () => {
 
 describe('sign in', () => {
   it('accepts the right password', () => {
-    const user = auth.loginUser({ email: 'admin@example.com', password: DEMO_PASSWORD });
+    const user = signInFully('admin@example.com');
     expect(user.role).toBe('ADMIN');
   });
 

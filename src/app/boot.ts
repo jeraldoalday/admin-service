@@ -1,4 +1,4 @@
-import { apiKeys, attachStorage, seedDatabase, sessions, teams } from '@/domain';
+import { apiKeys, attachStorage, auth, seedDatabase, sessions, teams } from '@/domain';
 
 export interface BootResult {
   /** Whether demo data was installed, as opposed to a previous session being adopted. */
@@ -9,6 +9,8 @@ export interface BootResult {
   expiredApiKeys: number;
   /** Signed-in sessions that reached their expiry while the console was closed. */
   expiredSessions: number;
+  /** Half-finished sign-ins nobody came back to answer. */
+  expiredSignInChallenges: number;
 }
 
 /**
@@ -22,6 +24,11 @@ export interface BootResult {
  * what outlives the session, and leaving them claiming to be pending or active long after
  * they died would mislead anything that reads them without going through the domain.
  *
+ * A half-finished sign-in is the one row the sweep deletes rather than stamps. An invite, an
+ * API key, and a session all have something left to tell a reader once they are over; a
+ * challenge nobody answered has nothing to say beyond its own existence, and the sign-in
+ * attempt table already records what was tried.
+ *
  * Sessions are the sweep's best case: a browser closed for a fortnight comes back to rows
  * that say plainly when each of them ended, rather than to a table that has to be reasoned
  * about against the clock every time anybody reads it.
@@ -34,8 +41,15 @@ export function bootstrapDatabase(storage: Storage | null): BootResult {
       expiredInvites: teams.expireStaleInvites(),
       expiredApiKeys: apiKeys.expireStaleApiKeys(),
       expiredSessions: sessions.expireStaleSessions(),
+      expiredSignInChallenges: auth.expireStaleSignInChallenges(),
     };
   }
   seedDatabase();
-  return { seeded: true, expiredInvites: 0, expiredApiKeys: 0, expiredSessions: 0 };
+  return {
+    seeded: true,
+    expiredInvites: 0,
+    expiredApiKeys: 0,
+    expiredSessions: 0,
+    expiredSignInChallenges: 0,
+  };
 }

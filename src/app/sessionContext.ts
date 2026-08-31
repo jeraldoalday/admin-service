@@ -1,12 +1,19 @@
 import { createContext, useContext } from 'react';
-import type { Actor, PublicUser } from '@/domain';
+import type { Actor, PublicUser, SignInResult } from '@/domain';
 
 export interface SessionContextValue {
   user: PublicUser | null;
   /** The session this browser is holding, or null when it is signed out. */
   sessionId: string | null;
   actor: Actor | null;
-  signIn: (email: string, password: string) => PublicUser;
+  /**
+   * Weighs a password. It returns what happened rather than an account, because with an
+   * authenticator in play "the password was right" and "you are signed in" are two different
+   * answers and a caller should not be able to conflate them.
+   */
+  signIn: (email: string, password: string) => SignInResult;
+  /** Answers an outstanding challenge, and opens the session the password did not. */
+  completeTwoFactor: (challengeId: string, code: string) => PublicUser;
   register: (email: string, password: string, displayName: string) => PublicUser;
   signOut: () => void;
 }

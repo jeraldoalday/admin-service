@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { audit, auth, getDatabase, users } from '@/domain';
-import { adminActor, danaActor, DEMO_PASSWORD } from '../helpers';
+import { adminActor, danaActor, DEMO_PASSWORD, signInFully } from '../helpers';
 
 describe('updating your own profile', () => {
   it('renames the account and records who did it', () => {
@@ -59,9 +59,7 @@ describe('changing your own password', () => {
 
     auth.changePassword(dana, change);
 
-    expect(auth.loginUser({ email: 'dana@example.com', password: 'a-longer-secret' }).id).toBe(
-      dana.id,
-    );
+    expect(signInFully('dana@example.com', 'a-longer-secret').id).toBe(dana.id);
     expect(() => auth.loginUser({ email: 'dana@example.com', password: DEMO_PASSWORD })).toThrow(
       'Invalid email or password',
     );
@@ -73,7 +71,7 @@ describe('changing your own password', () => {
     expect(() =>
       auth.changePassword(dana, { ...change, currentPassword: 'not-the-password' }),
     ).toThrow('Your current password is incorrect');
-    expect(auth.loginUser({ email: 'dana@example.com', password: DEMO_PASSWORD }).id).toBe(dana.id);
+    expect(signInFully('dana@example.com').id).toBe(dana.id);
   });
 
   it('refuses a confirmation that does not match', () => {

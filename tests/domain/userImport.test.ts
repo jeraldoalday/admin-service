@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { audit, auth, getDatabase, userImport } from '@/domain';
-import { adminActor, rajActor } from '../helpers';
+import { audit, getDatabase, userImport } from '@/domain';
+import { adminActor, rajActor, signInFully } from '../helpers';
 
 const HEADER = 'email,name,role';
 
@@ -141,10 +141,7 @@ describe('running an import', () => {
     const result = userImport.importUsers(adminActor(), file('noor@example.com,Noor Haddad,'));
     const created = result.created[0];
 
-    const signedIn = auth.loginUser({
-      email: 'noor@example.com',
-      password: created?.temporaryPassword ?? '',
-    });
+    const signedIn = signInFully('noor@example.com', created?.temporaryPassword ?? '');
 
     expect(signedIn.displayName).toBe('Noor Haddad');
   });

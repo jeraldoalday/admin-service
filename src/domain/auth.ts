@@ -2,20 +2,23 @@ import { recordAuditLog } from './audit';
 import { getDatabase, mutate } from './database';
 import { ConflictError, TooManyRequestsError, UnauthorizedError } from './errors';
 import { requireActor, type Actor } from './guards';
-import { createId, nowIso } from './ids';
+import { createId, createToken, nowIso } from './ids';
 import { lockStateFor, recordSignInAttempt } from './lockout';
 import { hashPassword, verifyPassword } from './password';
 import { revokeSessionsForUser } from './sessions';
-import type { PublicUser, UserRecord } from './types';
+import { consumeTwoFactorCode, isTwoFactorEnabled } from './twoFactor';
+import type { PublicUser, SignInChallengeRecord, SignInResult, UserRecord } from './types';
 import {
   changePasswordSchema,
   loginSchema,
   parseInput,
   registerSchema,
+  twoFactorChallengeSchema,
   updateProfileSchema,
   type ChangePasswordInput,
   type LoginInput,
   type RegisterInput,
+  type TwoFactorChallengeInput,
   type UpdateProfileInput,
 } from './validation';
 
@@ -78,14 +81,60 @@ export function registerUser(input: RegisterInput): PublicUser {
 }
 
 /**
+ * How long a half-finished sign-in stays open.
+ *
+ * Long enough to find a phone that is in another room, short enough that a challenge left
+ * behind on a shared machine is worthless by the time anybody else sits down at it. It is
+ * minutes rather than the session's days on purpose: a challenge is a promise that somebody
+ * knew the password a moment ago, and that promise should not outlive the moment.
+ */
+export const SIGN_IN_CHALLENGE_TTL_MS = 5 * 60 * 1000;
+
+function createSignInChallenge(userId: string): SignInChallengeRecord {
+  return mutate((db) => {
+    const challenge: SignInChallengeRecord = {
+      // A random token rather than a sequential id, for the same reason a session id is one:
+      // it is the only thing standing between the second step and the account.
+      id: createToken(18),
+      userId,
+      expiresAt: new Date(Date.now() + SIGN_IN_CHALLENGE_TTL_MS).toISOString(),
+      consumedAt: null,
+      createdAt: nowIso(),
+    };
+    db.signInChallenges.push(challenge);
+    return challenge;
+  });
+}
+
+/** The challenge behind an id, or null when it is spent, lapsed, or was never there. */
+function resolveSignInChallenge(
+  challengeId: string,
+  now = Date.now(),
+): SignInChallengeRecord | null {
+  const challenge = getDatabase().signInChallenges.find(
+    (candidate) => candidate.id === challengeId,
+  );
+  if (!challenge || challenge.consumedAt || Date.parse(challenge.expiresAt) <= now) return null;
+  return challenge;
+}
+
+/**
  * Weighs a set of credentials, and writes down that it did.
  *
- * Every path out of here records an attempt, which is what gives the throttle something to
- * count and the account holder something to read. The lock is checked before the password
- * is, so a locked address costs nothing to refuse and the refusal cannot be timed against a
- * successful verification to learn whether the password was right.
+ * The lock is checked before the password is, so a locked address costs nothing to refuse
+ * and the refusal cannot be timed against a successful verification to learn whether the
+ * password was right.
+ *
+ * A correct password against an account with an authenticator records *nothing* and returns
+ * a challenge instead. That is the one deliberate gap in "every path out of here records an
+ * attempt": knowing the password is not signing in when a second factor is required, and an
+ * attempt logged as SUCCEEDED for somebody who never produced a code would be a line in the
+ * account holder's own security panel telling them a sign-in happened that did not. The
+ * attempt is recorded when the sign-in actually resolves, one way or the other — which also
+ * puts code guessing under the same throttle as password guessing, since each wrong code is
+ * a FAILED attempt against the address.
  */
-export function loginUser(input: LoginInput): PublicUser {
+export function loginUser(input: LoginInput): SignInResult {
   const parsed = parseInput(loginSchema, input);
   const user = findUserByEmail(parsed.email);
   const attempt = { email: parsed.email, userId: user?.id ?? null };
@@ -110,8 +159,86 @@ export function loginUser(input: LoginInput): PublicUser {
     throw new UnauthorizedError('This account has been deactivated');
   }
 
+  if (isTwoFactorEnabled(user.id)) {
+    const challenge = createSignInChallenge(user.id);
+    return {
+      kind: 'TWO_FACTOR_REQUIRED',
+      challengeId: challenge.id,
+      expiresAt: challenge.expiresAt,
+    };
+  }
+
+  recordSignInAttempt({ ...attempt, outcome: 'SUCCEEDED' });
+  return { kind: 'COMPLETE', user: toPublicUser(user) };
+}
+
+/**
+ * Answers a challenge with a code, and finishes the sign-in.
+ *
+ * The account is re-read rather than trusted from the challenge: five minutes is long enough
+ * for an administrator to have deactivated it, and a sign-in that completes into an account
+ * somebody has just switched off would be the deactivation quietly failing.
+ *
+ * A wrong code leaves the challenge open, so somebody who fat-fingered a digit can simply
+ * type it again — the lockout is what bounds the guessing, and it is already counting. What
+ * a wrong code does not get is a second life for the *code*: the domain spends both kinds on
+ * use, so a correct one cannot be replayed even while it is still inside its window.
+ */
+export function completeTwoFactorSignIn(rawInput: TwoFactorChallengeInput): PublicUser {
+  const input = parseInput(twoFactorChallengeSchema, rawInput);
+
+  const challenge = resolveSignInChallenge(input.challengeId);
+  if (!challenge) {
+    throw new UnauthorizedError('That sign-in has expired. Enter your password again.');
+  }
+
+  const user = findUserById(challenge.userId);
+  const attempt = { email: user?.email ?? '', userId: challenge.userId };
+
+  if (!user || !user.isActive) {
+    recordSignInAttempt({ ...attempt, outcome: 'BLOCKED' });
+    throw new UnauthorizedError('This account has been deactivated');
+  }
+
+  if (lockStateFor(user.email).isLocked) {
+    recordSignInAttempt({ ...attempt, outcome: 'BLOCKED' });
+    throw new TooManyRequestsError('Too many failed sign-in attempts. Try again in a few minutes.');
+  }
+
+  const factor = consumeTwoFactorCode(user.id, input.code);
+  if (!factor) {
+    recordSignInAttempt({ ...attempt, outcome: 'FAILED' });
+    throw new UnauthorizedError('That code is not right. Check your authenticator and try again.');
+  }
+
+  mutate(() => {
+    challenge.consumedAt = nowIso();
+  });
+
   recordSignInAttempt({ ...attempt, outcome: 'SUCCEEDED' });
   return toPublicUser(user);
+}
+
+/**
+ * Drops the challenges that lapsed while nobody was looking, and reports how many.
+ *
+ * Reads already refuse a lapsed challenge, so nothing depends on this having run. What it
+ * buys is that the table does not accumulate a row for every sign-in anybody abandoned:
+ * unlike an invite or a session, a spent challenge has nothing left to tell anybody, so it
+ * is deleted rather than stamped.
+ */
+export function expireStaleSignInChallenges(now = Date.now()): number {
+  const stale = getDatabase().signInChallenges.filter(
+    (challenge) => challenge.consumedAt || Date.parse(challenge.expiresAt) <= now,
+  );
+  if (stale.length === 0) return 0;
+
+  const ids = new Set(stale.map((challenge) => challenge.id));
+  mutate((db) => {
+    db.signInChallenges = db.signInChallenges.filter((challenge) => !ids.has(challenge.id));
+  });
+
+  return stale.length;
 }
 
 /**

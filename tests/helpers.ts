@@ -1,7 +1,28 @@
-import { auth, getDatabase, teams, type Actor, type TeamPermission, type UserRole } from '@/domain';
+import {
+  auth,
+  getDatabase,
+  teams,
+  type Actor,
+  type PublicUser,
+  type TeamPermission,
+  type UserRole,
+} from '@/domain';
 import { permissions } from '@/domain';
 
 export const DEMO_PASSWORD = 'password123';
+
+/**
+ * Signs in and insists the sign-in finished, which is what a test that is not about
+ * two-factor authentication means by "sign in". A challenge coming back here is a real
+ * failure rather than something to null-check around.
+ */
+export function signInFully(email: string, password = DEMO_PASSWORD): PublicUser {
+  const result = auth.loginUser({ email, password });
+  if (result.kind !== 'COMPLETE') {
+    throw new Error(`Signing in as ${email} asked for a second factor`);
+  }
+  return result.user;
+}
 
 /** Looks up a seeded account by email and returns it as an actor. */
 export function actorFor(email: string): Actor {
