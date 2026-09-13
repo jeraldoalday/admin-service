@@ -19,10 +19,12 @@ export function MembersTab({
   teamId,
   canManageMembers,
   canManagePermissions,
+  isOwner,
 }: {
   teamId: string;
   canManageMembers: boolean;
   canManagePermissions: boolean;
+  isOwner: boolean;
 }): ReactNode {
   const actor = useActor();
   const [page, setPage] = useState(1);
@@ -73,7 +75,9 @@ export function MembersTab({
                     value={member.role}
                     onChange={(event) => changeRole(member.userId, event.target.value as TeamRole)}
                   >
-                    <option value="OWNER">OWNER</option>
+                    {/* Promoting to OWNER is owner-only; the domain layer refuses it either
+                        way, but there is no reason to offer an option that only errors. */}
+                    {(isOwner || member.role === 'OWNER') && <option value="OWNER">OWNER</option>}
                     <option value="ADMIN">ADMIN</option>
                     <option value="MEMBER">MEMBER</option>
                   </select>

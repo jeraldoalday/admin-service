@@ -358,12 +358,19 @@ export function updateMemberRole(
   rawRole: TeamRole,
 ): TeamMemberView {
   const current = requireActor(actor);
-  requireTeamPermission(actor, teamId, 'MANAGE_MEMBERS');
+  const actorMembership = requireTeamPermission(actor, teamId, 'MANAGE_MEMBERS');
   const { role } = parseInput(updateMemberRoleSchema, { role: rawRole });
 
   const membership = findMembership(teamId, targetUserId);
   if (!membership) {
     throw new NotFoundError('Team member not found');
+  }
+
+  // MANAGE_MEMBERS is held by ADMIN by default (and can be granted to a plain MEMBER), but
+  // promoting someone to OWNER is a step up in power those roles don't otherwise carry —
+  // without this, an ADMIN could hand OWNER to themselves or anyone else on the team.
+  if (role === 'OWNER' && actorMembership.role !== 'OWNER') {
+    throw new ForbiddenError('Only an owner can promote a member to owner');
   }
 
   if (membership.role === 'OWNER' && role !== 'OWNER' && countOwners(teamId) <= 1) {
