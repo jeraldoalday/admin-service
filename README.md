@@ -81,8 +81,11 @@ protect a last owner would otherwise leave that team unreachable.
 **Teams** are a self-service multi-tenancy layer, independent of the platform `role`: any
 signed-in user can create a team and becomes its `OWNER`. Team roles (`OWNER`/`ADMIN`/`MEMBER`)
 only mean something inside that team. A team always needs at least one owner — the last one
-cannot be demoted, removed, or leave. Invites are single-use tokens tied to an email address,
-expire after seven days, and can only be accepted while signed in as the address they name.
+cannot be demoted, removed, or leave. Promoting a member to `OWNER` can only be done by an
+existing `OWNER`: `MANAGE_MEMBERS` alone, which `ADMIN` holds by default, is not enough, so an
+`ADMIN` cannot hand ownership to themselves or anyone else. Invites are single-use tokens tied
+to an email address, expire after seven days, and can only be accepted while signed in as the
+address they name.
 There is no mail transport, so a pending invite's link stays retrievable from the invites tab
 for as long as it is valid; accepted, revoked, and expired invites offer none, because their
 links are dead. An invite's status is derived as it is read rather than taken from the row, so
