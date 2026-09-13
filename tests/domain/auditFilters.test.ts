@@ -210,13 +210,39 @@ describe("a team's own activity", () => {
     ]);
   });
 
-  it('refuses the actor and action lists to a member without MANAGE_TEAM', () => {
+  it('offers the target types present in this team and no others', () => {
+    const admin = adminActor();
+    const platform = teamIdBySlug('platform');
+    teams.updateTeam(danaActor(), teamIdBySlug('growth'), { name: 'Growth Core' });
+
+    expect(audit.listTeamActivityTargetTypes(admin, platform)).toEqual([
+      'api_key',
+      'team',
+      'team_membership',
+    ]);
+  });
+
+  it('narrows a team activity read by target type', () => {
+    const admin = adminActor();
+    const platform = teamIdBySlug('platform');
+    apiKeys.createApiKey(admin, platform, { name: 'deploy', permissions: [] });
+
+    const activity = audit.listTeamActivity(admin, platform, { targetType: 'api_key' });
+
+    expect(activity.items.every((entry) => entry.targetType === 'api_key')).toBe(true);
+    expect(activity.total).toBeGreaterThan(0);
+  });
+
+  it('refuses the actor, action, and target type lists to a member without MANAGE_TEAM', () => {
     const platform = teamIdBySlug('platform');
 
     expect(() => audit.listTeamActivityActors(rajActor(), platform)).toThrow(
       'You do not have permission to perform this action',
     );
     expect(() => audit.listTeamActivityActions(rajActor(), platform)).toThrow(
+      'You do not have permission to perform this action',
+    );
+    expect(() => audit.listTeamActivityTargetTypes(rajActor(), platform)).toThrow(
       'You do not have permission to perform this action',
     );
   });

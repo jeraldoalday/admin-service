@@ -18,6 +18,7 @@ export function ActivityTab({ teamId }: { teamId: string }): ReactNode {
   const actor = useActor();
   const [page, setPage] = useState(1);
   const [action, setAction] = useState('');
+  const [targetType, setTargetType] = useState('');
   const [actorId, setActorId] = useState('');
   const [search, setSearch] = useState('');
   const [from, setFrom] = useState('');
@@ -27,6 +28,7 @@ export function ActivityTab({ teamId }: { teamId: string }): ReactNode {
 
   const filters: AuditLogFilters = {
     ...(action ? { action } : {}),
+    ...(targetType ? { targetType } : {}),
     ...(actorId ? { actorId } : {}),
     ...(search.trim() ? { search: search.trim() } : {}),
     ...(from ? { from } : {}),
@@ -38,6 +40,7 @@ export function ActivityTab({ teamId }: { teamId: string }): ReactNode {
     audit.listTeamActivity(actor, teamId, { ...filters, page, pageSize: 10 }),
   );
   const actions = useLiveQuery(() => audit.listTeamActivityActions(actor, teamId));
+  const targetTypes = useLiveQuery(() => audit.listTeamActivityTargetTypes(actor, teamId));
   const actors = useLiveQuery(() => audit.listTeamActivityActors(actor, teamId));
   const actorLabels = new Map(actors.map((candidate) => [candidate.id, candidate.label]));
 
@@ -51,6 +54,7 @@ export function ActivityTab({ teamId }: { teamId: string }): ReactNode {
   function clearFilters(): void {
     changeFilter(() => {
       setAction('');
+      setTargetType('');
       setActorId('');
       setSearch('');
       setFrom('');
@@ -103,6 +107,19 @@ export function ActivityTab({ teamId }: { teamId: string }): ReactNode {
           >
             <option value="">All actions</option>
             {actions.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Target type">
+          <select
+            value={targetType}
+            onChange={(event) => changeFilter(() => setTargetType(event.target.value))}
+          >
+            <option value="">All targets</option>
+            {targetTypes.map((value) => (
               <option key={value} value={value}>
                 {value}
               </option>

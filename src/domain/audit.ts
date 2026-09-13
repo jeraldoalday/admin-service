@@ -163,6 +163,18 @@ export function listTeamActivityActions(actor: Actor, teamId: string): string[] 
   ].sort();
 }
 
+/** Distinct target types present in one team's slice of the log. */
+export function listTeamActivityTargetTypes(actor: Actor, teamId: string): string[] {
+  requireTeamPermission(actor, teamId, 'MANAGE_TEAM');
+  return [
+    ...new Set(
+      getDatabase()
+        .auditLogs.filter((log) => log.teamId === teamId)
+        .map((log) => log.targetType),
+    ),
+  ].sort();
+}
+
 export interface AuditTeamOption {
   id: string;
   /** The team's current name, or its bare id once the team itself is gone. */

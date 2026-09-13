@@ -70,6 +70,19 @@ describe('the activity tab', () => {
     expect(table().queryByText('team.created')).not.toBeInTheDocument();
   });
 
+  it('narrows by target type', async () => {
+    apiKeys.createApiKey(adminActor(), teamIdBySlug('platform'), {
+      name: 'deploy-bot',
+      permissions: [],
+    });
+    const { user } = await openActivity(adminActor().id);
+
+    await user.selectOptions(screen.getByLabelText('Target type'), 'api_key');
+
+    expect(table().getAllByText('api_key.created').length).toBeGreaterThan(0);
+    expect(table().queryByText('team.created')).not.toBeInTheDocument();
+  });
+
   it('narrows by actor', async () => {
     const growth = teamIdBySlug('growth');
     teams.updateTeam(danaActor(), growth, { name: 'Growth Core' });
