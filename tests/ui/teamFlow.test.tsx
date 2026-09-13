@@ -63,6 +63,15 @@ describe('managing members', () => {
     ).toBe('ADMIN');
   });
 
+  it('does not offer OWNER in the role select to a caller who is not one', () => {
+    // Dana is a team ADMIN on Platform, not an OWNER — the domain layer refuses an
+    // ADMIN promoting anyone to OWNER, so the select should not offer it either.
+    openTeam(danaActor().id);
+
+    const select = screen.getByLabelText('Team role for Raj Patel') as HTMLSelectElement;
+    expect(Array.from(select.options).map((option) => option.value)).toEqual(['ADMIN', 'MEMBER']);
+  });
+
   it('explains why the last owner cannot be demoted', async () => {
     const { user } = openTeam(adminActor().id);
 

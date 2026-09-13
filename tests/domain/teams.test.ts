@@ -57,6 +57,30 @@ describe('member roles', () => {
     );
   });
 
+  it('refuses to let an admin promote a member to owner', () => {
+    const platform = teamIdBySlug('platform');
+    const raj = rajActor();
+
+    // Dana is a team ADMIN on Platform, which carries MANAGE_MEMBERS by default — but
+    // promoting to OWNER is not something that permission should unlock on its own.
+    expect(() => teams.updateMemberRole(danaActor(), platform, raj.id, 'OWNER')).toThrow(
+      'Only an owner can promote a member to owner',
+    );
+    expect(
+      teams.listTeamMembers(adminActor(), platform).items.find((member) => member.userId === raj.id)
+        ?.role,
+    ).toBe('MEMBER');
+  });
+
+  it('refuses to let an admin promote themselves to owner', () => {
+    const platform = teamIdBySlug('platform');
+    const dana = danaActor();
+
+    expect(() => teams.updateMemberRole(dana, platform, dana.id, 'OWNER')).toThrow(
+      'Only an owner can promote a member to owner',
+    );
+  });
+
   it('keeps at least one owner on the team', () => {
     const admin = adminActor();
     const platform = teamIdBySlug('platform');
