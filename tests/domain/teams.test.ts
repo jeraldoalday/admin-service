@@ -47,7 +47,7 @@ describe('member roles', () => {
     const updated = teams.updateMemberRole(admin, platform, raj.id, 'ADMIN');
 
     expect(updated.role).toBe('ADMIN');
-    expect(audit.listAuditLogs({ action: 'team.member.role_updated' }).total).toBe(1);
+    expect(audit.listAuditLogs(adminActor(), { action: 'team.member.role_updated' }).total).toBe(1);
   });
 
   it('refuses a plain member without the permission', () => {
@@ -247,7 +247,7 @@ describe('invites', () => {
       'This invite has already expired',
     );
     expect(getDatabase().invites.find((row) => row.id === invite.id)?.status).toBe('EXPIRED');
-    expect(audit.listAuditLogs({ action: 'team.invite.revoked' }).total).toBe(0);
+    expect(audit.listAuditLogs(adminActor(), { action: 'team.invite.revoked' }).total).toBe(0);
   });
 
   it('revokes only pending invites', () => {
@@ -295,6 +295,6 @@ describe('deleting a team', () => {
     expect(db.invites.filter((i) => i.teamId === platform)).toHaveLength(0);
     expect(db.permissionGrants.filter((g) => g.teamId === platform)).toHaveLength(0);
     expect(db.apiKeys.filter((k) => k.teamId === platform)).toHaveLength(0);
-    expect(audit.listAuditLogs({ action: 'team.deleted' }).total).toBe(1);
+    expect(audit.listAuditLogs(adminActor(), { action: 'team.deleted' }).total).toBe(1);
   });
 });

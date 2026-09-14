@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { audit, teams, users } from '@/domain';
-import { adminActor, danaActor, teamIdBySlug } from '../helpers';
+import { adminActor, danaActor, rajActor, teamIdBySlug } from '../helpers';
 
 describe('the audit log', () => {
   it('records every mutation, newest first', () => {
@@ -10,7 +10,7 @@ describe('the audit log', () => {
     teams.updateTeam(admin, platform, { name: 'Platform Core' });
     users.updateUser(admin, danaActor().id, { displayName: 'Dana D.' });
 
-    const recent = audit.listAuditLogs({ pageSize: 2 }).items;
+    const recent = audit.listAuditLogs(adminActor(), { pageSize: 2 }).items;
     expect(recent.map((entry) => entry.action)).toEqual(['user.updated', 'team.updated']);
   });
 
@@ -18,7 +18,7 @@ describe('the audit log', () => {
     const admin = adminActor();
     teams.updateTeam(admin, teamIdBySlug('platform'), { name: 'Renamed' });
 
-    expect(audit.listAuditLogs({ action: 'team.updated' }).items[0]).toMatchObject({
+    expect(audit.listAuditLogs(adminActor(), { action: 'team.updated' }).items[0]).toMatchObject({
       actorId: admin.id,
       targetType: 'team',
       metadata: { name: 'Renamed' },
@@ -29,13 +29,13 @@ describe('the audit log', () => {
     const admin = adminActor();
     users.updateUser(admin, danaActor().id, { displayName: 'Dana D.' });
 
-    expect(audit.listAuditLogs({ action: 'user.updated' }).total).toBe(2);
-    expect(audit.listAuditLogs({ targetType: 'team' }).total).toBe(1);
-    expect(audit.listAuditLogs({ action: 'nothing.happened' }).total).toBe(0);
+    expect(audit.listAuditLogs(adminActor(), { action: 'user.updated' }).total).toBe(2);
+    expect(audit.listAuditLogs(adminActor(), { targetType: 'team' }).total).toBe(1);
+    expect(audit.listAuditLogs(adminActor(), { action: 'nothing.happened' }).total).toBe(0);
   });
 
   it('paginates', () => {
-    const page = audit.listAuditLogs({ page: 2, pageSize: 2 });
+    const page = audit.listAuditLogs(adminActor(), { page: 2, pageSize: 2 });
 
     expect(page.page).toBe(2);
     expect(page.items).toHaveLength(2);
@@ -49,17 +49,21 @@ describe('the audit log', () => {
       audit.recordAuditLog({ actorId: null, action: 'bulk.tested', targetType: 'test' });
     }
 
-    expect(audit.listAuditLogs({ action: 'bulk.tested', pageSize: 100 }).items).toHaveLength(100);
-    expect(audit.listAllAuditLogs({ action: 'bulk.tested' })).toHaveLength(120);
+    expect(
+      audit.listAuditLogs(adminActor(), { action: 'bulk.tested', pageSize: 100 }).items,
+    ).toHaveLength(100);
+    expect(audit.listAllAuditLogs(adminActor(), { action: 'bulk.tested' })).toHaveLength(120);
   });
 
   it('applies the same filters to the unpaginated read as to a page', () => {
     const admin = adminActor();
     teams.updateTeam(admin, teamIdBySlug('platform'), { name: 'Renamed' });
 
-    expect(audit.listAllAuditLogs({ targetType: 'team' })).toHaveLength(2);
-    expect(audit.listAllAuditLogs({ action: 'team.updated' })).toHaveLength(1);
-    expect(audit.listAllAuditLogs()).toHaveLength(audit.listAuditLogs({ pageSize: 100 }).total);
+    expect(audit.listAllAuditLogs(adminActor(), { targetType: 'team' })).toHaveLength(2);
+    expect(audit.listAllAuditLogs(adminActor(), { action: 'team.updated' })).toHaveLength(1);
+    expect(audit.listAllAuditLogs(adminActor())).toHaveLength(
+      audit.listAuditLogs(adminActor(), { pageSize: 100 }).total,
+    );
   });
 
   it('filters by a date range, counting a bare date as the whole day it names', () => {
@@ -72,10 +76,10 @@ describe('the audit log', () => {
 
     // The entry was just written, so a range ending today has to include it — which it only
     // does if the boundary covers the whole day rather than the instant it starts.
-    expect(audit.listAuditLogs({ from: today, to: today }).total).toBe(1);
-    expect(audit.listAuditLogs({ from: yesterday }).total).toBe(1);
-    expect(audit.listAuditLogs({ to: yesterday }).total).toBe(4); // the seeded backdated entries
-    expect(audit.listAuditLogs({ from: tomorrow }).total).toBe(0);
+    expect(audit.listAuditLogs(adminActor(), { from: today, to: today }).total).toBe(1);
+    expect(audit.listAuditLogs(adminActor(), { from: yesterday }).total).toBe(1);
+    expect(audit.listAuditLogs(adminActor(), { to: yesterday }).total).toBe(4); // the seeded backdated entries
+    expect(audit.listAuditLogs(adminActor(), { from: tomorrow }).total).toBe(0);
   });
 
   it('combines a date range with the other filters', () => {
@@ -85,24 +89,50 @@ describe('the audit log', () => {
 
     const today = new Date().toISOString().slice(0, 10);
 
-    expect(audit.listAuditLogs({ from: today, action: 'team.updated' }).total).toBe(1);
-    expect(audit.listAllAuditLogs({ from: today })).toHaveLength(2);
+    expect(audit.listAuditLogs(adminActor(), { from: today, action: 'team.updated' }).total).toBe(
+      1,
+    );
+    expect(audit.listAllAuditLogs(adminActor(), { from: today })).toHaveLength(2);
   });
 
   it('refuses a range that ends before it starts, and a date it cannot read', () => {
-    expect(() => audit.listAuditLogs({ from: '2026-08-19', to: '2026-08-18' })).toThrow(
-      'The start of the range must not be after its end',
+    expect(() =>
+      audit.listAuditLogs(adminActor(), { from: '2026-08-19', to: '2026-08-18' }),
+    ).toThrow('The start of the range must not be after its end');
+    expect(() => audit.listAuditLogs(adminActor(), { from: 'last tuesday' })).toThrow(
+      'must be a valid date',
     );
-    expect(() => audit.listAuditLogs({ from: 'last tuesday' })).toThrow('must be a valid date');
   });
 
   it('offers the distinct actions and target types present, for filter menus', () => {
-    expect(audit.listAuditActions()).toEqual([
+    expect(audit.listAuditActions(adminActor())).toEqual([
       'api_key.created',
       'team.created',
       'team.member.permissions_updated',
       'user.updated',
     ]);
-    expect(audit.listAuditTargetTypes()).toEqual(['api_key', 'team', 'team_membership', 'user']);
+    expect(audit.listAuditTargetTypes(adminActor())).toEqual([
+      'api_key',
+      'team',
+      'team_membership',
+      'user',
+    ]);
+  });
+
+  // The platform log is admin-only, and the domain layer has to say so on its own rather than
+  // trusting the route guard that keeps a plain member from reaching the screen at all — a
+  // caller that reaches these functions some other way must still be refused here.
+  describe('is refused for a non-admin', () => {
+    it('on every platform-wide read', () => {
+      const raj = rajActor();
+      const denied = 'You do not have permission to perform this action';
+
+      expect(() => audit.listAuditLogs(raj)).toThrow(denied);
+      expect(() => audit.listAllAuditLogs(raj)).toThrow(denied);
+      expect(() => audit.listAuditActions(raj)).toThrow(denied);
+      expect(() => audit.listAuditTargetTypes(raj)).toThrow(denied);
+      expect(() => audit.listAuditTeams(raj)).toThrow(denied);
+      expect(() => audit.listAuditActors(raj)).toThrow(denied);
+    });
   });
 });

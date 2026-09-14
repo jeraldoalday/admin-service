@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { useActor } from '@/app/sessionContext';
 import { useLiveQuery, useLiveResult } from '@/app/store';
 import { DataTable, Pagination } from '@/components/DataTable';
 import { PageHeader } from '@/components/Layout';
@@ -9,6 +10,7 @@ import { formatDateTime } from '@/lib/format';
 
 /** Admin-only, read-only history of every mutation the console has performed. */
 export function AuditLogPage(): ReactNode {
+  const actor = useActor();
   const [page, setPage] = useState(1);
   const [action, setAction] = useState('');
   const [targetType, setTargetType] = useState('');
@@ -33,11 +35,13 @@ export function AuditLogPage(): ReactNode {
 
   // A range that ends before it starts is a rejection, not a crash: the domain refuses it and
   // the screen says so while leaving the controls exactly as the reader left them.
-  const result = useLiveResult(() => audit.listAuditLogs({ ...filters, page, pageSize: 15 }));
-  const actions = useLiveQuery(() => audit.listAuditActions());
-  const targetTypes = useLiveQuery(() => audit.listAuditTargetTypes());
-  const actors = useLiveQuery(() => audit.listAuditActors());
-  const auditTeams = useLiveQuery(() => audit.listAuditTeams());
+  const result = useLiveResult(() =>
+    audit.listAuditLogs(actor, { ...filters, page, pageSize: 15 }),
+  );
+  const actions = useLiveQuery(() => audit.listAuditActions(actor));
+  const targetTypes = useLiveQuery(() => audit.listAuditTargetTypes(actor));
+  const actors = useLiveQuery(() => audit.listAuditActors(actor));
+  const auditTeams = useLiveQuery(() => audit.listAuditTeams(actor));
   const teamLabels = new Map(auditTeams.map((candidate) => [candidate.id, candidate.label]));
   const actorLabels = new Map(actors.map((candidate) => [candidate.id, candidate.label]));
 
@@ -68,7 +72,7 @@ export function AuditLogPage(): ReactNode {
   function exportMatching(): void {
     setExportError(null);
     try {
-      const matching = audit.listAllAuditLogs(filters);
+      const matching = audit.listAllAuditLogs(actor, filters);
 
       const csv = toCsv(matching, [
         { header: 'Timestamp', value: (entry) => entry.createdAt },

@@ -77,7 +77,7 @@ describe('updating a user', () => {
 
     expect(updated.role).toBe('ADMIN');
     expect(updated.displayName).toBe('Dana D.');
-    expect(audit.listAuditLogs({ action: 'user.updated' }).items[0]).toMatchObject({
+    expect(audit.listAuditLogs(adminActor(), { action: 'user.updated' }).items[0]).toMatchObject({
       actorId: admin.id,
       targetId: dana.id,
     });
@@ -169,7 +169,7 @@ describe('deleting a user', () => {
 
     expect(getDatabase().teams.some((team) => team.id === solo.id)).toBe(false);
     expect(getDatabase().apiKeys.some((candidate) => candidate.id === key.apiKey.id)).toBe(false);
-    expect(audit.listAllAuditLogs({ action: 'team.deleted' })).toHaveLength(1);
+    expect(audit.listAllAuditLogs(adminActor(), { action: 'team.deleted' })).toHaveLength(1);
   });
 
   it('leaves a team alone when it still has another owner', () => {
@@ -198,6 +198,6 @@ describe('deleting a user', () => {
     const admin = adminActor();
     users.deleteUser(admin, danaActor().id);
 
-    expect(audit.listAuditLogs({ action: 'user.deleted' }).total).toBe(1);
+    expect(audit.listAuditLogs(adminActor(), { action: 'user.deleted' }).total).toBe(1);
   });
 });

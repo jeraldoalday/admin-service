@@ -10,7 +10,9 @@ describe('updating your own profile', () => {
 
     expect(updated.displayName).toBe('Dana D.');
     expect(auth.findUserById(dana.id)?.displayName).toBe('Dana D.');
-    expect(audit.listAuditLogs({ action: 'user.profile_updated' }).items[0]).toMatchObject({
+    expect(
+      audit.listAuditLogs(adminActor(), { action: 'user.profile_updated' }).items[0],
+    ).toMatchObject({
       actorId: dana.id,
       targetId: dana.id,
       metadata: { displayName: 'Dana D.' },
@@ -107,7 +109,7 @@ describe('changing your own password', () => {
 
     auth.changePassword(dana, change);
 
-    const entry = audit.listAuditLogs({ action: 'user.password_changed' }).items[0];
+    const entry = audit.listAuditLogs(adminActor(), { action: 'user.password_changed' }).items[0];
     expect(entry).toMatchObject({ actorId: dana.id, targetType: 'user', targetId: dana.id });
     expect(JSON.stringify(entry)).not.toContain('a-longer-secret');
     expect(JSON.stringify(entry)).not.toContain(DEMO_PASSWORD);

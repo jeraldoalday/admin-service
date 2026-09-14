@@ -18,14 +18,14 @@ describe('filtering the log by actor', () => {
     teams.updateTeam(admin, teamIdBySlug('platform'), { name: 'Platform Core' });
     teams.updateTeam(dana, teamIdBySlug('growth'), { name: 'Growth Core' });
 
-    const byDana = audit.listAuditLogs({ actorId: dana.id });
+    const byDana = audit.listAuditLogs(adminActor(), { actorId: dana.id });
 
     expect(byDana.total).toBe(1);
     expect(byDana.items[0]?.metadata).toEqual({ name: 'Growth Core' });
   });
 
   it('lists the accounts that appear in the log, labelled by name and email', () => {
-    const options = audit.listAuditActors();
+    const options = audit.listAuditActors(adminActor());
 
     expect(options).toEqual([{ id: adminActor().id, label: 'Avery Admin (admin@example.com)' }]);
   });
@@ -36,11 +36,11 @@ describe('filtering the log by actor', () => {
     teams.createTeam(departing, { name: 'Short Lived' });
     users.deleteUser(admin, departing.id);
 
-    const options = audit.listAuditActors();
+    const options = audit.listAuditActors(adminActor());
     const orphaned = options.find((option) => option.id === departing.id);
 
     expect(orphaned?.label).toBe(departing.id);
-    expect(audit.listAuditLogs({ actorId: departing.id }).total).toBeGreaterThan(0);
+    expect(audit.listAuditLogs(adminActor(), { actorId: departing.id }).total).toBeGreaterThan(0);
   });
 });
 
@@ -48,21 +48,21 @@ describe('searching the log', () => {
   it('matches the metadata, which is where the interesting detail lives', () => {
     teams.createInvite(adminActor(), teamIdBySlug('platform'), { email: 'noor2@example.com' });
 
-    const found = audit.listAuditLogs({ search: 'noor2@example.com' });
+    const found = audit.listAuditLogs(adminActor(), { search: 'noor2@example.com' });
 
     expect(found.total).toBe(1);
     expect(found.items[0]?.action).toBe('team.invite.created');
   });
 
   it('matches the action and the target type as well', () => {
-    expect(audit.listAuditLogs({ search: 'api_key' }).total).toBe(1);
-    expect(audit.listAuditLogs({ search: 'team_membership' }).total).toBe(1);
+    expect(audit.listAuditLogs(adminActor(), { search: 'api_key' }).total).toBe(1);
+    expect(audit.listAuditLogs(adminActor(), { search: 'team_membership' }).total).toBe(1);
   });
 
   it('ignores case', () => {
     teams.updateTeam(adminActor(), teamIdBySlug('platform'), { name: 'Platform Core' });
 
-    expect(audit.listAuditLogs({ search: 'PLATFORM CORE' }).total).toBe(1);
+    expect(audit.listAuditLogs(adminActor(), { search: 'PLATFORM CORE' }).total).toBe(1);
   });
 
   it('combines with the other filters rather than replacing them', () => {
@@ -70,8 +70,10 @@ describe('searching the log', () => {
     teams.updateTeam(admin, teamIdBySlug('platform'), { name: 'Shared Word' });
     users.updateUser(admin, danaActor().id, { displayName: 'Shared Word' });
 
-    expect(audit.listAuditLogs({ search: 'shared word' }).total).toBe(2);
-    expect(audit.listAuditLogs({ search: 'shared word', targetType: 'team' }).total).toBe(1);
+    expect(audit.listAuditLogs(adminActor(), { search: 'shared word' }).total).toBe(2);
+    expect(
+      audit.listAuditLogs(adminActor(), { search: 'shared word', targetType: 'team' }).total,
+    ).toBe(1);
   });
 
   it('reaches every match through the unpaginated read an export uses', () => {
@@ -84,7 +86,7 @@ describe('searching the log', () => {
       });
     }
 
-    expect(audit.listAllAuditLogs({ search: 'findme' })).toHaveLength(120);
+    expect(audit.listAllAuditLogs(adminActor(), { search: 'findme' })).toHaveLength(120);
   });
 });
 

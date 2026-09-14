@@ -87,20 +87,22 @@ describe('the users screen', () => {
     await user.type(nameField, 'Dana D.');
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
-    expect(audit.listAuditLogs({ action: 'user.updated' }).items[0]?.metadata).toEqual({
+    expect(
+      audit.listAuditLogs(adminActor(), { action: 'user.updated' }).items[0]?.metadata,
+    ).toEqual({
       displayName: 'Dana D.',
     });
   });
 
   it('closes without writing anything when nothing was edited', async () => {
     const { user } = renderAsAdmin();
-    const before = audit.listAuditLogs({ action: 'user.updated' }).total;
+    const before = audit.listAuditLogs(adminActor(), { action: 'user.updated' }).total;
 
     await user.click(within(rowFor('Dana Diaz')).getByRole('button', { name: 'Edit' }));
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(audit.listAuditLogs({ action: 'user.updated' }).total).toBe(before);
+    expect(audit.listAuditLogs(adminActor(), { action: 'user.updated' }).total).toBe(before);
   });
 
   it('will not let an admin demote themselves', async () => {

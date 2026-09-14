@@ -29,7 +29,9 @@ describe('issuing an API key', () => {
 
   it('records the creation in the audit log', () => {
     const { apiKey } = createKey();
-    expect(audit.listAuditLogs({ action: 'api_key.created' }).items[0]?.targetId).toBe(apiKey.id);
+    expect(
+      audit.listAuditLogs(adminActor(), { action: 'api_key.created' }).items[0]?.targetId,
+    ).toBe(apiKey.id);
   });
 
   it('deduplicates scopes and accepts a key with none', () => {
@@ -115,7 +117,9 @@ describe('revoking and rotating', () => {
     expect(rotated.apiKey.name).toBe(original.apiKey.name);
     expect(rotated.apiKey.permissions).toEqual(['MANAGE_MEMBERS']);
     expect(apiKeys.getApiKey(admin, platform, original.apiKey.id).status).toBe('REVOKED');
-    expect(audit.listAuditLogs({ action: 'api_key.rotated' }).items[0]?.metadata).toMatchObject({
+    expect(
+      audit.listAuditLogs(adminActor(), { action: 'api_key.rotated' }).items[0]?.metadata,
+    ).toMatchObject({
       rotatedFrom: original.apiKey.id,
     });
   });

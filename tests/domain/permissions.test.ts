@@ -67,7 +67,7 @@ describe('granting permissions', () => {
     );
     // The seed already carries one such entry, so assert on the newest rather than the count.
     expect(
-      audit.listAuditLogs({ action: 'team.member.permissions_updated' }).items[0],
+      audit.listAuditLogs(adminActor(), { action: 'team.member.permissions_updated' }).items[0],
     ).toMatchObject({ actorId: admin.id, metadata: { permissions: ['MANAGE_API_KEYS'] } });
   });
 

@@ -1,5 +1,5 @@
 import { getDatabase, mutate } from './database';
-import { requireTeamPermission, type Actor } from './guards';
+import { requireAdmin, requireTeamPermission, type Actor } from './guards';
 import { createId, nowIso } from './ids';
 import { paginate, sortNewestFirst, type PaginatedResult } from './pagination';
 import type { AuditLogRecord, AuditLogView } from './types';
@@ -85,7 +85,11 @@ function matchesFilters(log: AuditLogRecord, filters: ParsedFilters): boolean {
   return true;
 }
 
-export function listAuditLogs(rawQuery: ListAuditLogsQuery = {}): PaginatedResult<AuditLogView> {
+export function listAuditLogs(
+  actor: Actor,
+  rawQuery: ListAuditLogsQuery = {},
+): PaginatedResult<AuditLogView> {
+  requireAdmin(actor);
   const query = parseInput(listAuditLogsQuerySchema, rawQuery);
   const matching = getDatabase().auditLogs.filter((log) => matchesFilters(log, query));
   return paginate(sortNewestFirst(matching), query);
@@ -98,17 +102,20 @@ export function listAuditLogs(rawQuery: ListAuditLogsQuery = {}): PaginatedResul
  * hundred rows by the pagination schema, so an export that asked for one page stopped at a
  * hundred entries while telling the reader it covered everything the filters matched.
  */
-export function listAllAuditLogs(rawFilters: AuditLogFilters = {}): AuditLogView[] {
+export function listAllAuditLogs(actor: Actor, rawFilters: AuditLogFilters = {}): AuditLogView[] {
+  requireAdmin(actor);
   const filters = parseInput(auditFiltersSchema, rawFilters);
   return sortNewestFirst(getDatabase().auditLogs.filter((log) => matchesFilters(log, filters)));
 }
 
 /** Distinct action names present in the log, for populating the filter dropdown. */
-export function listAuditActions(): string[] {
+export function listAuditActions(actor: Actor): string[] {
+  requireAdmin(actor);
   return [...new Set(getDatabase().auditLogs.map((log) => log.action))].sort();
 }
 
-export function listAuditTargetTypes(): string[] {
+export function listAuditTargetTypes(actor: Actor): string[] {
+  requireAdmin(actor);
   return [...new Set(getDatabase().auditLogs.map((log) => log.targetType))].sort();
 }
 
@@ -188,7 +195,8 @@ export interface AuditTeamOption {
  * are exactly the ones somebody asking what happened to it is looking for, and the last of
  * them is the deletion itself.
  */
-export function listAuditTeams(): AuditTeamOption[] {
+export function listAuditTeams(actor: Actor): AuditTeamOption[] {
+  requireAdmin(actor);
   const db = getDatabase();
   const ids = [...new Set(db.auditLogs.flatMap((log) => (log.teamId ? [log.teamId] : [])))];
 
@@ -225,7 +233,8 @@ function toActorOptions(ids: string[]): AuditActorOption[] {
  * whose account has since been deleted keeps its id as the label, since the entries it wrote
  * are still there and still worth reaching.
  */
-export function listAuditActors(): AuditActorOption[] {
+export function listAuditActors(actor: Actor): AuditActorOption[] {
+  requireAdmin(actor);
   return toActorOptions([
     ...new Set(getDatabase().auditLogs.flatMap((log) => (log.actorId ? [log.actorId] : []))),
   ]);
