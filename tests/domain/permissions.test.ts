@@ -124,4 +124,54 @@ describe('granting permissions', () => {
       'Team member not found',
     );
   });
+
+  it('refuses to grant a permission the caller does not hold themselves', () => {
+    const admin = adminActor();
+    const platform = teamIdBySlug('platform');
+    const raj = rajActor();
+
+    // MANAGE_PERMISSIONS alone is not enough to grant MANAGE_MEMBERS — the same shape of guard
+    // as MANAGE_MEMBERS alone not being enough to promote someone to OWNER.
+    permissions.setMemberPermissionGrants(admin, platform, raj.id, ['MANAGE_PERMISSIONS']);
+
+    expect(() =>
+      permissions.setMemberPermissionGrants(raj, platform, raj.id, [
+        'MANAGE_PERMISSIONS',
+        'MANAGE_MEMBERS',
+      ]),
+    ).toThrow('You cannot grant a permission you do not hold yourself: MANAGE_MEMBERS');
+
+    expect(permissions.getOwnPermissions(raj, platform).grantedPermissions).toEqual([
+      'MANAGE_PERMISSIONS',
+    ]);
+  });
+
+  it('lets a limited grantor keep or remove a permission they do not hold, once someone else granted it', () => {
+    const admin = adminActor();
+    const platform = teamIdBySlug('platform');
+    const raj = rajActor();
+
+    // Admin (who holds everything) grants raj a permission raj could never have granted alone.
+    permissions.setMemberPermissionGrants(admin, platform, raj.id, [
+      'MANAGE_PERMISSIONS',
+      'MANAGE_MEMBERS',
+    ]);
+
+    // Raj, now holding MANAGE_PERMISSIONS, can resubmit the same set unchanged...
+    expect(
+      permissions.setMemberPermissionGrants(raj, platform, raj.id, [
+        'MANAGE_PERMISSIONS',
+        'MANAGE_MEMBERS',
+      ]).grantedPermissions,
+    ).toEqual(['MANAGE_PERMISSIONS', 'MANAGE_MEMBERS']);
+
+    // ...or drop the one they do not hold themselves, but cannot add it back once it is gone.
+    permissions.setMemberPermissionGrants(raj, platform, raj.id, ['MANAGE_PERMISSIONS']);
+    expect(() =>
+      permissions.setMemberPermissionGrants(raj, platform, raj.id, [
+        'MANAGE_PERMISSIONS',
+        'MANAGE_MEMBERS',
+      ]),
+    ).toThrow('You cannot grant a permission you do not hold yourself: MANAGE_MEMBERS');
+  });
 });

@@ -1,6 +1,6 @@
 import { recordAuditLog } from './audit';
 import { getDatabase, mutate } from './database';
-import { NotFoundError } from './errors';
+import { ForbiddenError, NotFoundError } from './errors';
 import { findMembership, requireActor, requireTeamPermission, type Actor } from './guards';
 import { createId, nowIso } from './ids';
 import {
@@ -68,10 +68,30 @@ export function setMemberPermissionGrants(
   permissions: TeamPermission[],
 ): EffectivePermissions {
   const current = requireActor(actor);
-  requireTeamPermission(actor, teamId, 'MANAGE_PERMISSIONS');
+  const actorMembership = requireTeamPermission(actor, teamId, 'MANAGE_PERMISSIONS');
   const input = parseInput(setMemberPermissionsSchema, { permissions });
   const membership = getMembershipOrThrow(teamId, userId);
   const unique = [...new Set(input.permissions)];
+
+  // MANAGE_PERMISSIONS lets a caller edit grants, but not hand out power they do not hold
+  // themselves — without this, a MEMBER granted only MANAGE_PERMISSIONS could grant themselves
+  // (or anyone else) the other four permissions and end up with an ADMIN's access despite never
+  // holding it, the same shape of gap MANAGE_MEMBERS alone left around OWNER promotion. Already
+  // having a permission on the books, granted earlier by someone who did hold it, is left alone:
+  // this only blocks a caller from newly adding one they cannot themselves grant.
+  const actorPermissions = mergePermissions(
+    actorMembership.role,
+    grantsFor(teamId, current.id),
+  ).effectivePermissions;
+  const alreadyGranted = grantsFor(teamId, userId);
+  const beyondActor = unique.filter(
+    (permission) => !actorPermissions.includes(permission) && !alreadyGranted.includes(permission),
+  );
+  if (beyondActor.length > 0) {
+    throw new ForbiddenError(
+      `You cannot grant a permission you do not hold yourself: ${beyondActor.join(', ')}`,
+    );
+  }
 
   mutate((db) => {
     db.permissionGrants = db.permissionGrants.filter(

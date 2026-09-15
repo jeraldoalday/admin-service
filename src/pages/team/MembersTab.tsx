@@ -165,10 +165,18 @@ function PermissionsDialog({
       return null;
     }
   });
+  const own = useLiveQuery(() => permissionsApi.getOwnPermissions(actor, teamId));
 
   const [selected, setSelected] = useState<TeamPermission[]>(
     () => current?.grantedPermissions ?? [],
   );
+  // What can be newly checked here: the domain refuses a grant beyond what the granter holds
+  // themselves, so a permission neither the actor's own effective set nor this member's
+  // existing grants cover would only round-trip as an error.
+  const grantableByActor = new Set([
+    ...own.effectivePermissions,
+    ...(current?.grantedPermissions ?? []),
+  ]);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
@@ -202,17 +210,19 @@ function PermissionsDialog({
       <div className="permission-grid">
         {TEAM_PERMISSIONS.map((permission) => {
           const fromRole = rolePermissions.includes(permission);
+          const beyondActor = !fromRole && !grantableByActor.has(permission);
           return (
             <label key={permission} className="checkbox">
               <input
                 type="checkbox"
                 checked={fromRole || selected.includes(permission)}
-                disabled={fromRole}
+                disabled={fromRole || beyondActor}
                 onChange={(event) => toggle(permission, event.target.checked)}
               />
               <span>
                 {humanizePermission(permission)}
                 {fromRole && <span className="cell--tag">from role</span>}
+                {beyondActor && <span className="cell--tag">not held</span>}
               </span>
             </label>
           );
