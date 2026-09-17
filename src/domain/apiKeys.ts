@@ -4,6 +4,7 @@ import { BadRequestError, ForbiddenError, NotFoundError, UnauthorizedError } fro
 import { requireActor, requireTeamPermission, type Actor } from './guards';
 import { createId, createToken, nowIso } from './ids';
 import { paginate, sortNewestFirst, type PaginatedResult } from './pagination';
+import { getOwnPermissions } from './permissions';
 import { sha256Hex } from './sha256';
 import type { ApiKeyRecord, ApiKeyStatus, ApiKeyView, TeamPermission } from './types';
 import {
@@ -94,6 +95,20 @@ export function createApiKey(
   const current = requireActor(actor);
   requireTeamPermission(actor, teamId, 'MANAGE_API_KEYS');
   const input = parseInput(createApiKeySchema, rawInput);
+
+  // MANAGE_API_KEYS lets a caller mint a key, but not scope it with more access than they hold
+  // themselves — without this, a MEMBER granted only MANAGE_API_KEYS could issue a key carrying
+  // the other four permissions and hand a machine caller access they never had as a person, the
+  // same shape of gap MANAGE_MEMBERS alone left around OWNER promotion.
+  const actorPermissions = getOwnPermissions(actor, teamId).effectivePermissions;
+  const beyondActor = input.permissions.filter(
+    (permission) => !actorPermissions.includes(permission),
+  );
+  if (beyondActor.length > 0) {
+    throw new ForbiddenError(
+      `You cannot scope an API key with a permission you do not hold yourself: ${beyondActor.join(', ')}`,
+    );
+  }
 
   const secret = generateSecret();
 

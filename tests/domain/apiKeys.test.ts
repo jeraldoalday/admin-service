@@ -67,6 +67,45 @@ describe('issuing an API key', () => {
       apiKeys.createApiKey(raj, platform, { name: 'granted', permissions: [] }),
     ).not.toThrow();
   });
+
+  it('refuses to scope a key with a permission the caller does not hold themselves', () => {
+    const admin = adminActor();
+    const platform = teamIdBySlug('platform');
+    const raj = rajActor();
+
+    // MANAGE_API_KEYS alone is not enough to mint a key scoped with MANAGE_MEMBERS — the same
+    // shape of guard as MANAGE_PERMISSIONS alone not being enough to grant MANAGE_MEMBERS.
+    permissions.setMemberPermissionGrants(admin, platform, raj.id, ['MANAGE_API_KEYS']);
+    const before = apiKeys.listApiKeys(admin, platform).total;
+
+    expect(() =>
+      apiKeys.createApiKey(raj, platform, {
+        name: 'escalating',
+        permissions: ['MANAGE_MEMBERS'],
+      }),
+    ).toThrow(
+      'You cannot scope an API key with a permission you do not hold yourself: MANAGE_MEMBERS',
+    );
+
+    expect(apiKeys.listApiKeys(admin, platform).total).toBe(before);
+  });
+
+  it('lets a limited caller scope a key with a permission they hold themselves', () => {
+    const admin = adminActor();
+    const platform = teamIdBySlug('platform');
+    const raj = rajActor();
+
+    permissions.setMemberPermissionGrants(admin, platform, raj.id, [
+      'MANAGE_API_KEYS',
+      'MANAGE_INVITES',
+    ]);
+
+    const { apiKey } = apiKeys.createApiKey(raj, platform, {
+      name: 'in-scope',
+      permissions: ['MANAGE_INVITES'],
+    });
+    expect(apiKey.permissions).toEqual(['MANAGE_INVITES']);
+  });
 });
 
 describe('listing API keys', () => {
