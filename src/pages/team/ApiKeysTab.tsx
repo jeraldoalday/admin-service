@@ -71,7 +71,9 @@ export function ApiKeysTab({ teamId }: { teamId: string }): ReactNode {
       const created = apiKeysApi.createApiKey(actor, teamId, {
         name,
         permissions: scopes,
-        ...(expiresAt ? { expiresAt: new Date(expiresAt).toISOString() } : {}),
+        // Passed as the bare date the picker gives us — the schema widens it to the end of the
+        // day it names, so picking today does not read as already expired.
+        ...(expiresAt ? { expiresAt } : {}),
       });
       setIssuedSecret({ label: `Key "${created.apiKey.name}" created`, secret: created.secret });
       setName('');

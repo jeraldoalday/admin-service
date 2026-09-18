@@ -258,6 +258,20 @@ describe('API keys', () => {
     expect(within(screen.getByRole('table')).getByText('deploy-bot')).toBeInTheDocument();
   });
 
+  it('creates a key that expires today rather than rejecting it as already in the past', async () => {
+    const { user } = openTeam(adminActor().id);
+    await user.click(screen.getByRole('button', { name: 'API keys' }));
+
+    const today = new Date().toISOString().slice(0, 10);
+    await user.type(screen.getByLabelText('Key name'), 'expires-today');
+    await user.type(screen.getByLabelText('Expires'), today);
+    await user.click(screen.getByRole('button', { name: 'Create key' }));
+
+    expect(await screen.findByText(/Copy the secret now/)).toBeInTheDocument();
+    const stored = getDatabase().apiKeys.find((key) => key.name === 'expires-today');
+    expect(stored?.expiresAt).toBe(`${today}T23:59:59.999Z`);
+  });
+
   it('rejects a key the console did not just issue', async () => {
     const { user } = openTeam(adminActor().id);
     await user.click(screen.getByRole('button', { name: 'API keys' }));

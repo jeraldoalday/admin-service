@@ -50,6 +50,37 @@ describe('issuing an API key', () => {
     ).toThrow('expiresAt must be in the future');
   });
 
+  /**
+   * The "Expires" field sends a bare date, exactly as a date picker gives it. Read literally
+   * that names midnight UTC, which for most of the world has already passed by the time anyone
+   * is choosing today's date — so it must be treated as naming the whole day, the same way an
+   * audit log date range is, rather than rejected as already in the past.
+   */
+  it('accepts a bare date for expiresAt, treating it as the end of that day', () => {
+    const today = new Date().toISOString().slice(0, 10);
+
+    const { apiKey } = apiKeys.createApiKey(adminActor(), teamIdBySlug('platform'), {
+      name: 'expires-today',
+      permissions: [],
+      expiresAt: today,
+    });
+
+    expect(apiKey.expiresAt).toBe(`${today}T23:59:59.999Z`);
+    expect(apiKey.status).toBe('ACTIVE');
+  });
+
+  it('still refuses a bare date that names a day already past', () => {
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+    expect(() =>
+      apiKeys.createApiKey(adminActor(), teamIdBySlug('platform'), {
+        name: 'stale-date',
+        permissions: [],
+        expiresAt: yesterday,
+      }),
+    ).toThrow('expiresAt must be in the future');
+  });
+
   it('is refused for a member without MANAGE_API_KEYS', () => {
     expect(() =>
       apiKeys.createApiKey(rajActor(), teamIdBySlug('platform'), { name: 'nope', permissions: [] }),

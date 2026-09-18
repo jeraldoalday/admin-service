@@ -13,6 +13,23 @@ export const paginationSchema = z.object({
   pageSize: z.coerce.number().int().positive().max(100).default(DEFAULT_PAGE_SIZE),
 });
 
+/**
+ * A calendar date names a whole day, not the instant it begins. Read as-is, a bare date would
+ * mean midnight UTC, which has usually already passed by the time anyone in a UTC-ahead
+ * timezone is using the console on that same calendar day — so a date-only value is widened to
+ * the end of the day it names wherever one is accepted, the same way the audit log widens the
+ * end of a date-range boundary.
+ */
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+export function startOfBoundary(value: string): number {
+  return Date.parse(DATE_ONLY.test(value) ? `${value}T00:00:00.000Z` : value);
+}
+
+export function endOfBoundary(value: string): number {
+  return Date.parse(DATE_ONLY.test(value) ? `${value}T23:59:59.999Z` : value);
+}
+
 export const userRoleEnum = z.enum(['ADMIN', 'MEMBER']);
 export const teamRoleEnum = z.enum(['OWNER', 'ADMIN', 'MEMBER']);
 export const inviteStatusEnum = z.enum(['PENDING', 'ACCEPTED', 'REVOKED', 'EXPIRED']);
@@ -149,10 +166,17 @@ export type SetMemberPermissionsInput = z.infer<typeof setMemberPermissionsSchem
 export const createApiKeySchema = z.object({
   name: z.string().trim().min(1, 'Key name is required').max(120),
   permissions: z.array(teamPermissionEnum).max(5).default([]),
+  // A bare date (the shape the "Expires" date picker sends) is widened to the end of the day
+  // it names before the future check runs — otherwise choosing today, or even tomorrow from a
+  // timezone ahead of UTC, reads as already in the past and is rejected the moment any time at
+  // all has passed since midnight UTC, which is virtually always.
   expiresAt: z
     .string()
     .trim()
     .min(1)
+    .transform((value) =>
+      DATE_ONLY.test(value) ? new Date(endOfBoundary(value)).toISOString() : value,
+    )
     .refine((value) => !Number.isNaN(Date.parse(value)), 'expiresAt must be a valid date')
     .refine((value) => Date.parse(value) > Date.now(), 'expiresAt must be in the future')
     .optional(),
@@ -172,21 +196,9 @@ const dateBoundary = z
   .min(1)
   .refine((value) => !Number.isNaN(Date.parse(value)), 'must be a valid date');
 
-/**
- * A calendar date names a whole day, not the instant it begins. Read as-is, a `to` of
- * 2026-08-19 would exclude everything that happened on the nineteenth, which is not what
- * anybody picking a date range means — so a date-only boundary is widened to cover its day.
- * Entries are stored as UTC instants, and the boundaries are read the same way.
- */
-const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
-
-export function startOfBoundary(value: string): number {
-  return Date.parse(DATE_ONLY.test(value) ? `${value}T00:00:00.000Z` : value);
-}
-
-export function endOfBoundary(value: string): number {
-  return Date.parse(DATE_ONLY.test(value) ? `${value}T23:59:59.999Z` : value);
-}
+// A `to` of 2026-08-19 is widened by `endOfBoundary` above to cover the whole day, since
+// entries are stored as UTC instants and read the same way — read as-is, it would exclude
+// everything that happened on the nineteenth, which is not what anybody picking a range means.
 
 const auditFilterFields = {
   action: z.string().trim().min(1).max(100).optional(),
