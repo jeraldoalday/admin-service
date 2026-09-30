@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { apiKeys, audit, getDatabase, teams, users } from '@/domain';
-import { adminActor, createUser, danaActor, joinTeam, miraActor, teamIdBySlug } from '../helpers';
+import {
+  adminActor,
+  createUser,
+  danaActor,
+  joinTeam,
+  miraActor,
+  rajActor,
+  teamIdBySlug,
+} from '../helpers';
 
 describe('listing users', () => {
   it('is refused for non-admins', () => {
@@ -108,6 +116,66 @@ describe('updating a user', () => {
     expect(() => users.updateUser(adminActor(), 'nope', { displayName: 'x' })).toThrow(
       'User not found',
     );
+  });
+
+  it('promotes a successor when deactivating a sole team owner', () => {
+    const admin = adminActor();
+    const growth = teamIdBySlug('growth');
+    const dana = danaActor();
+
+    // Dana is the only OWNER of Growth, and Mira is the only other member.
+    users.updateUser(admin, dana.id, { isActive: false });
+
+    const mira = getDatabase().users.find((user) => user.email === 'mira@example.com');
+    const membership = getDatabase().memberships.find(
+      (candidate) => candidate.teamId === growth && candidate.userId === mira?.id,
+    );
+    expect(membership?.role).toBe('OWNER');
+    // Dana keeps her own OWNER membership too — deactivation is reversible, unlike deletion.
+    const danaMembership = getDatabase().memberships.find(
+      (candidate) => candidate.teamId === growth && candidate.userId === dana.id,
+    );
+    expect(danaMembership?.role).toBe('OWNER');
+    expect(
+      audit.listAllAuditLogs(admin, { action: 'team.member.role_updated', teamId: growth }),
+    ).toHaveLength(1);
+  });
+
+  it('leaves a solely-owned team with no other members untouched on deactivation', () => {
+    const admin = adminActor();
+    const mira = miraActor();
+    const solo = teams.createTeam(mira, { name: 'Solo' });
+
+    users.updateUser(admin, mira.id, { isActive: false });
+
+    expect(getDatabase().teams.some((team) => team.id === solo.id)).toBe(true);
+    const membership = getDatabase().memberships.find(
+      (candidate) => candidate.teamId === solo.id && candidate.userId === mira.id,
+    );
+    expect(membership?.role).toBe('OWNER');
+  });
+
+  it('does not reassign anything when the team already has another owner', () => {
+    const admin = adminActor();
+    const platform = teamIdBySlug('platform');
+    const dana = danaActor();
+    teams.updateMemberRole(admin, platform, dana.id, 'OWNER');
+
+    users.updateUser(admin, dana.id, { isActive: false });
+
+    const owners = getDatabase().memberships.filter(
+      (candidate) => candidate.teamId === platform && candidate.role === 'OWNER',
+    );
+    expect(owners).toHaveLength(2);
+  });
+
+  it('does not reassign anything when deactivating a non-owner', () => {
+    const admin = adminActor();
+    const raj = rajActor();
+
+    users.updateUser(admin, raj.id, { isActive: false });
+
+    expect(audit.listAllAuditLogs(admin, { action: 'team.member.role_updated' })).toHaveLength(0);
   });
 });
 

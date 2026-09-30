@@ -4,7 +4,7 @@ import { BadRequestError, NotFoundError } from './errors';
 import { requireAdmin, type Actor } from './guards';
 import { nowIso } from './ids';
 import { paginate, sortNewestFirst, type PaginatedResult } from './pagination';
-import { reassignTeamsOwnedSolelyBy } from './teams';
+import { promoteSuccessorsForDeactivatedOwner, reassignTeamsOwnedSolelyBy } from './teams';
 import type { AdminUserView, UserRecord } from './types';
 import {
   listUsersQuerySchema,
@@ -129,6 +129,7 @@ export function updateUser(actor: Actor, id: string, rawInput: UpdateUserInput):
   }
 
   const existing = getUserRecordOrThrow(id);
+  const isDeactivating = input.isActive === false && existing.isActive;
 
   const updated = mutate(() => {
     if (input.displayName !== undefined) existing.displayName = input.displayName;
@@ -138,12 +139,17 @@ export function updateUser(actor: Actor, id: string, rawInput: UpdateUserInput):
     return toAdminUserView(existing);
   });
 
+  // A deactivated account cannot sign in, which leaves any team it solely owned with nobody
+  // able to act on it until it is reactivated. Give such a team a second owner now, the same
+  // way deleting the account would hand it over for good — see promoteSuccessorsForDeactivatedOwner.
+  const reassignments = isDeactivating ? promoteSuccessorsForDeactivatedOwner(admin.id, id) : [];
+
   recordAuditLog({
     actorId: admin.id,
     action: 'user.updated',
     targetType: 'user',
     targetId: id,
-    metadata: input,
+    metadata: reassignments.length > 0 ? { ...input, reassignedTeams: reassignments } : input,
   });
 
   return updated;

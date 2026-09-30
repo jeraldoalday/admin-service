@@ -15,6 +15,7 @@ import type {
   TeamInviteRecord,
   TeamInviteView,
   TeamMemberView,
+  TeamMembershipRecord,
   TeamRecord,
   TeamRole,
   TeamView,
@@ -237,6 +238,35 @@ export interface OwnershipReassignment {
   newOwnerId: string | null;
 }
 
+/** Every team `userId` is the sole OWNER of. */
+function soleOwnershipsOf(userId: string): TeamMembershipRecord[] {
+  return getDatabase().memberships.filter(
+    (membership) =>
+      membership.userId === userId &&
+      membership.role === 'OWNER' &&
+      countOwners(membership.teamId) === 1,
+  );
+}
+
+/**
+ * The member best placed to take over as OWNER, preferring a team ADMIN over a plain MEMBER
+ * since they already hold the permissions the role carries, and otherwise the longest-standing
+ * member — or `undefined` when `excludeUserId` was the only person on the team.
+ */
+function findOwnerSuccessor(
+  teamId: string,
+  excludeUserId: string,
+): TeamMembershipRecord | undefined {
+  return getDatabase()
+    .memberships.filter(
+      (membership) => membership.teamId === teamId && membership.userId !== excludeUserId,
+    )
+    .sort((a, b) => {
+      if (a.role !== b.role) return a.role === 'ADMIN' ? -1 : 1;
+      return a.createdAt.localeCompare(b.createdAt);
+    })[0];
+}
+
 /**
  * Keeps every team owned when a user leaves the platform.
  *
@@ -255,23 +285,9 @@ export function reassignTeamsOwnedSolelyBy(
   actorId: string,
   userId: string,
 ): OwnershipReassignment[] {
-  const soleOwnerships = getDatabase().memberships.filter(
-    (membership) =>
-      membership.userId === userId &&
-      membership.role === 'OWNER' &&
-      countOwners(membership.teamId) === 1,
-  );
-
-  return soleOwnerships.map((ownership) => {
+  return soleOwnershipsOf(userId).map((ownership) => {
     const teamId = ownership.teamId;
-    const successor = getDatabase()
-      .memberships.filter(
-        (membership) => membership.teamId === teamId && membership.userId !== userId,
-      )
-      .sort((a, b) => {
-        if (a.role !== b.role) return a.role === 'ADMIN' ? -1 : 1;
-        return a.createdAt.localeCompare(b.createdAt);
-      })[0];
+    const successor = findOwnerSuccessor(teamId, userId);
 
     if (!successor) {
       mutate((db) => {
@@ -309,6 +325,51 @@ export function reassignTeamsOwnedSolelyBy(
 
     return { teamId, newOwnerId: successor.userId };
   });
+}
+
+/**
+ * Gives a team a second owner when deactivating an account would otherwise leave it with none
+ * it can reach.
+ *
+ * Deactivation, unlike deletion, is not final — the account can be reactivated later — so a
+ * team the deactivated user solely owned is not deleted for want of a successor the way
+ * {@link reassignTeamsOwnedSolelyBy} deletes one: there would be no way back for a team that
+ * turned out to matter. Where another member exists, they are promoted alongside the existing
+ * owner (rather than in their place, since the deactivation might not stick) so the team keeps
+ * someone able to act on it. Where nobody else is on the team, it is left exactly as it was;
+ * the sole owner regains it the moment they are reactivated.
+ *
+ * Unguarded on purpose: it runs inside the admin-guarded update, and takes the acting admin so
+ * the entries it writes are attributed to the person who caused them.
+ */
+export function promoteSuccessorsForDeactivatedOwner(
+  actorId: string,
+  userId: string,
+): OwnershipReassignment[] {
+  const reassignments: OwnershipReassignment[] = [];
+
+  soleOwnershipsOf(userId).forEach((ownership) => {
+    const teamId = ownership.teamId;
+    const successor = findOwnerSuccessor(teamId, userId);
+    if (!successor) return;
+
+    mutate(() => {
+      successor.role = 'OWNER';
+    });
+
+    recordAuditLog({
+      actorId,
+      action: 'team.member.role_updated',
+      targetType: 'team_membership',
+      targetId: `${teamId}:${successor.userId}`,
+      teamId,
+      metadata: { role: 'OWNER', reason: 'owner_deactivated' },
+    });
+
+    reassignments.push({ teamId, newOwnerId: successor.userId });
+  });
+
+  return reassignments;
 }
 
 /**
