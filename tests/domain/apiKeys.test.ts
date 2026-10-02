@@ -204,6 +204,37 @@ describe('revoking and rotating', () => {
       'This API key is already revoked; create a new one instead',
     );
   });
+
+  it('refuses to rotate a key into carrying a permission the caller does not hold themselves', () => {
+    const admin = adminActor();
+    const platform = teamIdBySlug('platform');
+    const raj = rajActor();
+
+    // Minted by the admin with scopes Raj never held. Without this guard, rotating the key
+    // would keep it alive indefinitely under those scopes despite Raj only ever holding
+    // MANAGE_API_KEYS — the same escalation createApiKey already refuses outright.
+    const { apiKey } = createKey(['MANAGE_MEMBERS', 'MANAGE_TEAM']);
+    permissions.setMemberPermissionGrants(admin, platform, raj.id, ['MANAGE_API_KEYS']);
+
+    expect(() => apiKeys.rotateApiKey(raj, platform, apiKey.id)).toThrow(
+      'You cannot rotate a key scoped with a permission you do not hold yourself: MANAGE_MEMBERS, MANAGE_TEAM',
+    );
+    expect(apiKeys.getApiKey(admin, platform, apiKey.id).status).toBe('ACTIVE');
+  });
+
+  it('lets a limited caller rotate a key scoped within their own permissions', () => {
+    const admin = adminActor();
+    const platform = teamIdBySlug('platform');
+    const raj = rajActor();
+
+    const { apiKey } = createKey(['MANAGE_INVITES']);
+    permissions.setMemberPermissionGrants(admin, platform, raj.id, [
+      'MANAGE_API_KEYS',
+      'MANAGE_INVITES',
+    ]);
+
+    expect(() => apiKeys.rotateApiKey(raj, platform, apiKey.id)).not.toThrow();
+  });
 });
 
 describe('authenticating as a service', () => {

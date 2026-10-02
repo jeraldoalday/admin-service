@@ -220,6 +220,20 @@ export function rotateApiKey(
     throw new BadRequestError('This API key has expired; create a new one instead');
   }
 
+  // Rotation carries the old key's scopes across too, which would reopen the gap
+  // createApiKey's own check closes: a MEMBER holding only MANAGE_API_KEYS could not mint a
+  // key scoped beyond their own permissions, but could otherwise keep such a key alive
+  // indefinitely by rotating it before every expiry, never needing the permissions it carries.
+  const actorPermissions = getOwnPermissions(actor, teamId).effectivePermissions;
+  const beyondActor = apiKey.permissions.filter(
+    (permission) => !actorPermissions.includes(permission),
+  );
+  if (beyondActor.length > 0) {
+    throw new ForbiddenError(
+      `You cannot rotate a key scoped with a permission you do not hold yourself: ${beyondActor.join(', ')}`,
+    );
+  }
+
   const secret = generateSecret();
 
   const issued = mutate((db) => {
