@@ -262,6 +262,34 @@ describe('invites', () => {
     );
   });
 
+  it('refuses to revoke an invite that does not exist', () => {
+    const admin = adminActor();
+    const platform = teamIdBySlug('platform');
+
+    expect(() => teams.revokeInvite(admin, platform, 'not-a-real-invite-id')).toThrow(
+      'Invite not found',
+    );
+  });
+
+  it("refuses to revoke another team's invite even by its real id", () => {
+    const admin = adminActor();
+    const platform = teamIdBySlug('platform');
+    const growth = teamIdBySlug('growth');
+    const dana = danaActor();
+
+    // Dana owns growth and can issue an invite there; admin has MANAGE_INVITES on
+    // platform only. Presenting growth's own, real invite id scoped to platform must
+    // read as not found rather than leaking that the id exists on someone else's team.
+    const foreignInvite = teams.createInvite(dana, growth, { email: 'outsider@example.com' });
+
+    expect(() => teams.revokeInvite(admin, platform, foreignInvite.id)).toThrow('Invite not found');
+    expect(teams.listInvites(dana, growth, { status: 'PENDING' }).total).toBe(1);
+  });
+
+  it('refuses to accept an invite whose token does not exist', () => {
+    expect(() => teams.acceptInvite(miraActor(), 'not-a-real-token')).toThrow('Invite not found');
+  });
+
   it('is managed by a plain member holding MANAGE_INVITES', () => {
     const platform = teamIdBySlug('platform');
     const raj = rajActor();
