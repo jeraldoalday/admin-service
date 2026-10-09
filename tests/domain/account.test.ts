@@ -94,6 +94,18 @@ describe('changing your own password', () => {
     ).toThrow('Password must be at least 8 characters');
   });
 
+  it('refuses a new password that bcrypt would silently truncate once encoded', () => {
+    const tooLong = 'é'.repeat(72);
+
+    expect(() =>
+      auth.changePassword(danaActor(), {
+        currentPassword: DEMO_PASSWORD,
+        newPassword: tooLong,
+        confirmPassword: tooLong,
+      }),
+    ).toThrow('Password is too long once encoded');
+  });
+
   it('refuses reusing the current password', () => {
     expect(() =>
       auth.changePassword(danaActor(), {

@@ -35,6 +35,34 @@ describe('registration', () => {
     }
   });
 
+  it('rejects a password that bcrypt would silently truncate once encoded', () => {
+    // 72 characters, but each is 2 bytes in UTF-8 - 144 bytes once encoded. A plain
+    // character-count limit would wave this through, and bcryptjs would then hash only
+    // the first 72 bytes without ever saying so.
+    try {
+      auth.registerUser({
+        email: 'dmitri@example.com',
+        password: 'é'.repeat(72),
+        displayName: 'Dmitri',
+      });
+      expect.unreachable('registration should have been rejected');
+    } catch (error) {
+      expect(error).toBeInstanceOf(AppError);
+      expect((error as AppError).statusCode).toBe(400);
+    }
+  });
+
+  it('accepts a password that is exactly 72 bytes once encoded', () => {
+    // 36 two-byte characters is exactly 72 bytes - the boundary itself has to be let through.
+    const user = auth.registerUser({
+      email: 'boundary@example.com',
+      password: 'é'.repeat(36),
+      displayName: 'Boundary',
+    });
+
+    expect(user.email).toBe('boundary@example.com');
+  });
+
   it('makes the very first account an admin so the console is reachable', () => {
     replaceDatabase(emptyDatabase());
 

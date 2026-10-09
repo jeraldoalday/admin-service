@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { BadRequestError } from './errors';
 import { DEFAULT_PAGE_SIZE } from './pagination';
@@ -44,9 +45,25 @@ export const teamPermissionEnum = z.enum([
 
 // -- auth ------------------------------------------------------------------
 
+/**
+ * bcrypt only hashes the first 72 *bytes* of its input and `bcryptjs` truncates to that
+ * silently rather than raising, so a password past the limit still "works" but everything
+ * after byte 72 is never actually checked. `min`/`max` on a zod string count UTF-16 code
+ * units, not encoded bytes, so they miss exactly the passwords this matters for: one made of
+ * multi-byte characters can be well under any reasonable character limit while still being
+ * past 72 bytes once encoded. Checked with the same `truncates` helper `bcryptjs` hashes
+ * with, so this can never disagree with what actually gets verified.
+ */
+const newPasswordSchema = z
+  .string()
+  .min(8, 'Password must be at least 8 characters')
+  .refine((value) => !bcrypt.truncates(value), {
+    message: 'Password is too long once encoded; use a shorter password',
+  });
+
 export const registerSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  password: newPasswordSchema,
   displayName: z.string().trim().min(1).max(120),
 });
 export type RegisterInput = z.infer<typeof registerSchema>;
@@ -71,7 +88,7 @@ export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 export const changePasswordSchema = z
   .object({
     currentPassword: z.string().min(1, 'Your current password is required'),
-    newPassword: z.string().min(8, 'Password must be at least 8 characters'),
+    newPassword: newPasswordSchema,
     confirmPassword: z.string().min(1, 'Confirm your new password'),
   })
   .refine((data) => data.newPassword === data.confirmPassword, {
