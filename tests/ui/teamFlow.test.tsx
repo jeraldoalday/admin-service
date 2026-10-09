@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import { apiKeys, getDatabase, teams } from '@/domain';
-import { adminActor, danaActor, miraActor, rajActor, teamIdBySlug } from '../helpers';
+import {
+  adminActor,
+  createUser,
+  danaActor,
+  grant,
+  joinTeam,
+  miraActor,
+  rajActor,
+  teamIdBySlug,
+} from '../helpers';
 import { renderApp } from '../renderApp';
 
 function openTeam(actorId: string, slug = 'platform') {
@@ -256,6 +265,23 @@ describe('API keys', () => {
     expect(banner).toHaveTextContent('Copy the secret now');
     expect(secret).toBeDefined();
     expect(within(screen.getByRole('table')).getByText('deploy-bot')).toBeInTheDocument();
+  });
+
+  it('only offers scopes the caller holds themselves when minting a key', async () => {
+    const platform = teamIdBySlug('platform');
+    const owner = adminActor();
+    const scoped = createUser('scoped-minter@example.com', 'Scoped Minter');
+    joinTeam(owner, platform, scoped, 'scoped-minter@example.com');
+    grant(owner, platform, scoped.id, ['MANAGE_API_KEYS']);
+
+    const { user } = openTeam(scoped.id);
+    await user.click(screen.getByRole('button', { name: 'API keys' }));
+
+    const held = screen.getByRole('checkbox', { name: /Manage api keys/ });
+    const notHeld = screen.getByRole('checkbox', { name: /Manage members/ });
+    expect(held).toBeEnabled();
+    expect(notHeld).toBeDisabled();
+    expect(notHeld.closest('label')).toHaveTextContent('not held');
   });
 
   it('creates a key that expires today rather than rejecting it as already in the past', async () => {

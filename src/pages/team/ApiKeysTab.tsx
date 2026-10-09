@@ -14,6 +14,7 @@ import {
 import {
   API_KEY_STATUSES,
   apiKeys as apiKeysApi,
+  permissions as permissionsApi,
   service,
   TEAM_PERMISSIONS,
   toErrorMessage,
@@ -51,6 +52,11 @@ export function ApiKeysTab({ teamId }: { teamId: string }): ReactNode {
       ...(status === 'all' ? {} : { status }),
     }),
   );
+  // The domain refuses to scope a key with a permission the caller does not hold
+  // themselves (see createApiKey), so offering it here would only round-trip as an error —
+  // the same reasoning the permissions dialog on the members tab already applies to grants.
+  const own = useLiveQuery(() => permissionsApi.getOwnPermissions(actor, teamId));
+  const ownPermissions = new Set(own.effectivePermissions);
 
   // Only live keys are worth warning about: a revoked or already-expired key has nothing
   // left to lose by the date passing.
@@ -130,18 +136,28 @@ export function ApiKeysTab({ teamId }: { teamId: string }): ReactNode {
           </Field>
         </div>
 
-        <FieldGroup label="Scopes">
+        <FieldGroup
+          label="Scopes"
+          hint="You can only scope a key with permissions you hold yourself."
+        >
           <div className="permission-grid">
-            {TEAM_PERMISSIONS.map((permission) => (
-              <label key={permission} className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={scopes.includes(permission)}
-                  onChange={(event) => toggleScope(permission, event.target.checked)}
-                />
-                <span>{humanizePermission(permission)}</span>
-              </label>
-            ))}
+            {TEAM_PERMISSIONS.map((permission) => {
+              const beyondActor = !ownPermissions.has(permission);
+              return (
+                <label key={permission} className="checkbox">
+                  <input
+                    type="checkbox"
+                    checked={scopes.includes(permission)}
+                    disabled={beyondActor}
+                    onChange={(event) => toggleScope(permission, event.target.checked)}
+                  />
+                  <span>
+                    {humanizePermission(permission)}
+                    {beyondActor && <span className="cell--tag">not held</span>}
+                  </span>
+                </label>
+              );
+            })}
           </div>
         </FieldGroup>
 
