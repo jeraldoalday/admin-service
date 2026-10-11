@@ -10,16 +10,18 @@ import {
 } from './guards';
 import { createId, createToken, nowIso } from './ids';
 import { paginate, sortNewestFirst, sortOldestFirst, type PaginatedResult } from './pagination';
-import type {
-  InviteStatus,
-  TeamInviteRecord,
-  TeamInviteView,
-  TeamMemberView,
-  TeamMembershipRecord,
-  TeamRecord,
-  TeamRole,
-  TeamView,
-  TeamWithRole,
+import { getOwnPermissions } from './permissions';
+import {
+  ROLE_DEFAULT_PERMISSIONS,
+  type InviteStatus,
+  type TeamInviteRecord,
+  type TeamInviteView,
+  type TeamMemberView,
+  type TeamMembershipRecord,
+  type TeamRecord,
+  type TeamRole,
+  type TeamView,
+  type TeamWithRole,
 } from './types';
 import {
   createInviteSchema,
@@ -432,6 +434,24 @@ export function updateMemberRole(
   // without this, an ADMIN could hand OWNER to themselves or anyone else on the team.
   if (role === 'OWNER' && actorMembership.role !== 'OWNER') {
     throw new ForbiddenError('Only an owner can promote a member to owner');
+  }
+
+  // ADMIN carries every one of the five grantable permissions by default, so promoting
+  // someone to it is the same step up in power as granting all five directly — without
+  // this, a MEMBER holding only MANAGE_MEMBERS (their own grant, or someone else's) could
+  // promote anyone, including themselves, to ADMIN and gain the other four despite holding
+  // only one, the same shape of gap already closed around granting a permission directly
+  // (setMemberPermissionGrants) and scoping an API key (createApiKey, rotateApiKey).
+  if (role === 'ADMIN') {
+    const actorPermissions = getOwnPermissions(actor, teamId).effectivePermissions;
+    const beyondActor = ROLE_DEFAULT_PERMISSIONS.ADMIN.filter(
+      (permission) => !actorPermissions.includes(permission),
+    );
+    if (beyondActor.length > 0) {
+      throw new ForbiddenError(
+        `You cannot promote a member to a role that carries a permission you do not hold yourself: ${beyondActor.join(', ')}`,
+      );
+    }
   }
 
   if (membership.role === 'OWNER' && role !== 'OWNER' && countOwners(teamId) <= 1) {

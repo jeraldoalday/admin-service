@@ -83,7 +83,11 @@ signed-in user can create a team and becomes its `OWNER`. Team roles (`OWNER`/`A
 only mean something inside that team. A team always needs at least one owner — the last one
 cannot be demoted, removed, or leave. Promoting a member to `OWNER` can only be done by an
 existing `OWNER`: `MANAGE_MEMBERS` alone, which `ADMIN` holds by default, is not enough, so an
-`ADMIN` cannot hand ownership to themselves or anyone else. Invites are single-use tokens tied
+`ADMIN` cannot hand ownership to themselves or anyone else. Promoting a member to `ADMIN` is
+gated the same way `MANAGE_API_KEYS` gates scoping a key and `MANAGE_PERMISSIONS` gates
+granting a permission: the caller must already hold, themselves, every permission `ADMIN`
+carries by default — so a `MEMBER` holding only a `MANAGE_MEMBERS` grant cannot promote anyone,
+including themselves, into the other four. Invites are single-use tokens tied
 to an email address, expire after seven days, and can only be accepted while signed in as the
 address they name.
 There is no mail transport, so a pending invite's link stays retrievable from the invites tab

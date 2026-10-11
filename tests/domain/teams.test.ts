@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { audit, getDatabase, teams } from '@/domain';
-import { adminActor, createUser, danaActor, miraActor, rajActor, teamIdBySlug } from '../helpers';
+import {
+  adminActor,
+  createUser,
+  danaActor,
+  grant,
+  joinTeam,
+  miraActor,
+  rajActor,
+  teamIdBySlug,
+} from '../helpers';
 
 describe('creating a team', () => {
   it('makes the creator its owner', () => {
@@ -70,6 +79,50 @@ describe('member roles', () => {
       teams.listTeamMembers(adminActor(), platform).items.find((member) => member.userId === raj.id)
         ?.role,
     ).toBe('MEMBER');
+  });
+
+  it('refuses to let a member promote someone to admin on a MANAGE_MEMBERS grant alone', () => {
+    const admin = adminActor();
+    const platform = teamIdBySlug('platform');
+    const raj = rajActor();
+    const newcomer = createUser('newcomer@example.com');
+    joinTeam(admin, platform, newcomer, 'newcomer@example.com');
+
+    // Raj holds only MANAGE_MEMBERS, granted by the owner — the same shape of guard as
+    // MANAGE_MEMBERS alone not being enough to promote someone to owner. ADMIN carries every
+    // other grantable permission by default, so promoting to it is the same step up in power
+    // as granting all five directly, and raj holds only one of them.
+    grant(admin, platform, raj.id, ['MANAGE_MEMBERS']);
+
+    expect(() => teams.updateMemberRole(raj, platform, newcomer.id, 'ADMIN')).toThrow(
+      'You cannot promote a member to a role that carries a permission you do not hold yourself',
+    );
+    expect(
+      teams.listTeamMembers(admin, platform).items.find((member) => member.userId === newcomer.id)
+        ?.role,
+    ).toBe('MEMBER');
+  });
+
+  it('lets a member who holds every permission promote someone to admin', () => {
+    const admin = adminActor();
+    const platform = teamIdBySlug('platform');
+    const raj = rajActor();
+    const newcomer = createUser('newcomer2@example.com');
+    joinTeam(admin, platform, newcomer, 'newcomer2@example.com');
+
+    // Raj holds all five permissions as grants rather than through role, and ADMIN carries
+    // nothing beyond those five — so this does not hand raj anything raj could not already do.
+    grant(admin, platform, raj.id, [
+      'MANAGE_TEAM',
+      'MANAGE_MEMBERS',
+      'MANAGE_INVITES',
+      'MANAGE_PERMISSIONS',
+      'MANAGE_API_KEYS',
+    ]);
+
+    const updated = teams.updateMemberRole(raj, platform, newcomer.id, 'ADMIN');
+
+    expect(updated.role).toBe('ADMIN');
   });
 
   it('refuses to let an admin promote themselves to owner', () => {
