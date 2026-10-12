@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/Layout';
 import { Badge, Card, ErrorNotice, Field } from '@/components/ui';
 import {
   permissions as permissionsApi,
+  ROLE_DEFAULT_PERMISSIONS,
   teams,
   toErrorMessage,
   type TeamPermission,
@@ -98,6 +99,7 @@ export function TeamDetailPage(): ReactNode {
             canManageMembers={can('MANAGE_MEMBERS')}
             canManagePermissions={can('MANAGE_PERMISSIONS')}
             isOwner={team.data.role === 'OWNER'}
+            canPromoteToAdmin={ROLE_DEFAULT_PERMISSIONS.ADMIN.every(can)}
           />
         )}
         {activeTab === 'Invites' && <InvitesTab teamId={teamId} />}

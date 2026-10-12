@@ -20,11 +20,13 @@ export function MembersTab({
   canManageMembers,
   canManagePermissions,
   isOwner,
+  canPromoteToAdmin,
 }: {
   teamId: string;
   canManageMembers: boolean;
   canManagePermissions: boolean;
   isOwner: boolean;
+  canPromoteToAdmin: boolean;
 }): ReactNode {
   const actor = useActor();
   const [page, setPage] = useState(1);
@@ -75,10 +77,14 @@ export function MembersTab({
                     value={member.role}
                     onChange={(event) => changeRole(member.userId, event.target.value as TeamRole)}
                   >
-                    {/* Promoting to OWNER is owner-only; the domain layer refuses it either
-                        way, but there is no reason to offer an option that only errors. */}
+                    {/* Promoting to OWNER is owner-only, and promoting to ADMIN requires
+                        already holding every permission ADMIN carries by default; the domain
+                        layer refuses either one, but there is no reason to offer an option
+                        that only errors. */}
                     {(isOwner || member.role === 'OWNER') && <option value="OWNER">OWNER</option>}
-                    <option value="ADMIN">ADMIN</option>
+                    {(canPromoteToAdmin || member.role === 'ADMIN') && (
+                      <option value="ADMIN">ADMIN</option>
+                    )}
                     <option value="MEMBER">MEMBER</option>
                   </select>
                 ) : (

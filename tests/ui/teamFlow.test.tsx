@@ -81,6 +81,18 @@ describe('managing members', () => {
     expect(Array.from(select.options).map((option) => option.value)).toEqual(['ADMIN', 'MEMBER']);
   });
 
+  it('does not offer ADMIN in the role select to a caller who lacks every permission it carries', () => {
+    // Raj holds only MANAGE_MEMBERS on Platform — enough to change a role, but not enough to
+    // promote someone into a role that also carries the other four permissions, which the
+    // domain layer refuses the same way it refuses an ADMIN promoting anyone to OWNER.
+    grant(adminActor(), teamIdBySlug('platform'), rajActor().id, ['MANAGE_MEMBERS']);
+
+    openTeam(rajActor().id);
+
+    const select = screen.getByLabelText('Team role for Raj Patel') as HTMLSelectElement;
+    expect(Array.from(select.options).map((option) => option.value)).toEqual(['MEMBER']);
+  });
+
   it('explains why the last owner cannot be demoted', async () => {
     const { user } = openTeam(adminActor().id);
 
