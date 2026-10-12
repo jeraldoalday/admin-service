@@ -351,6 +351,41 @@ describe('invites', () => {
     expect(() => teams.createInvite(raj, platform, { email: 'granted@example.com' })).not.toThrow();
   });
 
+  it('refuses to invite someone as admin for a member who lacks every permission it carries', () => {
+    // Raj holds only MANAGE_INVITES on Platform. Without this check, he could invite an
+    // outside email as ADMIN and have it accepted straight into the other four permissions,
+    // the same gap updateMemberRole closes for an in-place promotion.
+    const platform = teamIdBySlug('platform');
+    const raj = rajActor();
+
+    expect(() =>
+      teams.createInvite(raj, platform, { email: 'outsider@example.com', role: 'ADMIN' }),
+    ).toThrow(
+      'You cannot invite someone into a role that carries a permission you do not hold yourself',
+    );
+  });
+
+  it('lets a member who holds every permission invite someone as admin', () => {
+    const admin = adminActor();
+    const platform = teamIdBySlug('platform');
+    const raj = rajActor();
+
+    grant(admin, platform, raj.id, [
+      'MANAGE_TEAM',
+      'MANAGE_MEMBERS',
+      'MANAGE_INVITES',
+      'MANAGE_PERMISSIONS',
+      'MANAGE_API_KEYS',
+    ]);
+
+    const invite = teams.createInvite(raj, platform, {
+      email: 'outsider2@example.com',
+      role: 'ADMIN',
+    });
+
+    expect(invite.role).toBe('ADMIN');
+  });
+
   it('is refused for a member without the permission', () => {
     const growth = teamIdBySlug('growth');
     expect(() => teams.listInvites(miraActor(), growth)).toThrow(

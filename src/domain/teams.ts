@@ -553,6 +553,23 @@ export function createInvite(
   requireTeamPermission(actor, teamId, 'MANAGE_INVITES');
   const input = parseInput(createInviteSchema, rawInput);
 
+  // ADMIN carries every one of the five grantable permissions by default, so an invite
+  // addressed at that role hands out the same step up in power as promoting someone to it
+  // directly — without this, a MEMBER holding only MANAGE_INVITES could invite an outside
+  // email as ADMIN and have it accepted straight into full access, sidestepping the check
+  // updateMemberRole already applies to an in-place promotion.
+  if (input.role === 'ADMIN') {
+    const actorPermissions = getOwnPermissions(actor, teamId).effectivePermissions;
+    const beyondActor = ROLE_DEFAULT_PERMISSIONS.ADMIN.filter(
+      (permission) => !actorPermissions.includes(permission),
+    );
+    if (beyondActor.length > 0) {
+      throw new ForbiddenError(
+        `You cannot invite someone into a role that carries a permission you do not hold yourself: ${beyondActor.join(', ')}`,
+      );
+    }
+  }
+
   const alreadyMember = getDatabase().memberships.some((membership) => {
     if (membership.teamId !== teamId) return false;
     const user = getDatabase().users.find((candidate) => candidate.id === membership.userId);
