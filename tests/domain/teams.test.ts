@@ -159,6 +159,37 @@ describe('member roles', () => {
     expect(() => teams.leaveTeam(admin, platform)).not.toThrow();
     expect(teams.listTeamsForUser(admin).total).toBe(0);
   });
+
+  it('refuses to let a member demote a co-owner on a MANAGE_MEMBERS grant alone', () => {
+    const admin = adminActor();
+    const platform = teamIdBySlug('platform');
+    const dana = danaActor();
+    const raj = rajActor();
+
+    // Dana is promoted to a second owner, and raj is granted MANAGE_MEMBERS without ever
+    // holding OWNER — the mirror of the fixture above that lets raj promote, but not to
+    // OWNER. Stripping OWNER from someone is the same step up in power as handing it out.
+    teams.updateMemberRole(admin, platform, dana.id, 'OWNER');
+    grant(admin, platform, raj.id, ['MANAGE_MEMBERS']);
+
+    expect(() => teams.updateMemberRole(raj, platform, dana.id, 'MEMBER')).toThrow(
+      "Only an owner can change another owner's role",
+    );
+    expect(
+      teams.listTeamMembers(admin, platform).items.find((member) => member.userId === dana.id)
+        ?.role,
+    ).toBe('OWNER');
+  });
+
+  it('lets an owner demote a co-owner', () => {
+    const admin = adminActor();
+    const platform = teamIdBySlug('platform');
+    const dana = danaActor();
+
+    teams.updateMemberRole(admin, platform, dana.id, 'OWNER');
+
+    expect(() => teams.updateMemberRole(admin, platform, dana.id, 'ADMIN')).not.toThrow();
+  });
 });
 
 describe('removing a member', () => {
@@ -172,6 +203,33 @@ describe('removing a member', () => {
 
     expect(getDatabase().permissionGrants).toHaveLength(0);
     expect(teams.listTeamMembers(admin, platform).total).toBe(2);
+  });
+
+  it('refuses to let a member remove a co-owner on a MANAGE_MEMBERS grant alone', () => {
+    const admin = adminActor();
+    const platform = teamIdBySlug('platform');
+    const dana = danaActor();
+    const raj = rajActor();
+
+    teams.updateMemberRole(admin, platform, dana.id, 'OWNER');
+    grant(admin, platform, raj.id, ['MANAGE_MEMBERS']);
+
+    expect(() => teams.removeMember(raj, platform, dana.id)).toThrow(
+      'Only an owner can remove another owner',
+    );
+    expect(
+      teams.listTeamMembers(admin, platform).items.some((member) => member.userId === dana.id),
+    ).toBe(true);
+  });
+
+  it('lets an owner remove a co-owner', () => {
+    const admin = adminActor();
+    const platform = teamIdBySlug('platform');
+    const dana = danaActor();
+
+    teams.updateMemberRole(admin, platform, dana.id, 'OWNER');
+
+    expect(() => teams.removeMember(admin, platform, dana.id)).not.toThrow();
   });
 
   it('reports an unknown member as not found', () => {

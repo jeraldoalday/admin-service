@@ -454,6 +454,16 @@ export function updateMemberRole(
     }
   }
 
+  // The mirror of the OWNER-promotion guard above: stripping OWNER from someone is also a
+  // step up in power for whoever does it, over anyone who was not already an OWNER. Without
+  // this, a MEMBER holding only a MANAGE_MEMBERS grant could demote a co-owner to ADMIN or
+  // MEMBER — reducing who holds the team's top role without ever having held it themselves,
+  // and leaving the countOwners check below as the only thing standing between the team and
+  // a single owner of this actor's own choosing.
+  if (membership.role === 'OWNER' && role !== 'OWNER' && actorMembership.role !== 'OWNER') {
+    throw new ForbiddenError("Only an owner can change another owner's role");
+  }
+
   if (membership.role === 'OWNER' && role !== 'OWNER' && countOwners(teamId) <= 1) {
     throw new BadRequestError('A team must have at least one owner');
   }
@@ -492,11 +502,17 @@ export function updateMemberRole(
  */
 export function removeMember(actor: Actor, teamId: string, targetUserId: string): void {
   const current = requireActor(actor);
-  requireTeamPermission(actor, teamId, 'MANAGE_MEMBERS');
+  const actorMembership = requireTeamPermission(actor, teamId, 'MANAGE_MEMBERS');
 
   const membership = findMembership(teamId, targetUserId);
   if (!membership) {
     throw new NotFoundError('Team member not found');
+  }
+  // Same guard as demoting an owner in updateMemberRole: removing one outright is another
+  // way to take their power away, and a MEMBER holding only a MANAGE_MEMBERS grant should no
+  // more be able to do that than to demote them in place.
+  if (membership.role === 'OWNER' && actorMembership.role !== 'OWNER') {
+    throw new ForbiddenError('Only an owner can remove another owner');
   }
   if (membership.role === 'OWNER' && countOwners(teamId) <= 1) {
     throw new BadRequestError('A team must have at least one owner');
