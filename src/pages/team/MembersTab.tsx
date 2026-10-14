@@ -71,7 +71,11 @@ export function MembersTab({
               </td>
               <td className="cell--muted">{member.email}</td>
               <td>
-                {canManageMembers ? (
+                {/* Changing an owner's role away from OWNER is owner-only too, the mirror of
+                    promoting someone into it: the domain layer refuses it for anyone else, so
+                    a non-owner gets the read-only badge here instead of a select that only
+                    errors the moment they touch it. */}
+                {canManageMembers && !(member.role === 'OWNER' && !isOwner) ? (
                   <select
                     aria-label={`Team role for ${member.displayName}`}
                     value={member.role}
@@ -105,6 +109,7 @@ export function MembersTab({
                   </button>
                 )}
                 {canManageMembers &&
+                  !(member.role === 'OWNER' && !isOwner) &&
                   (pendingRemoval === member.userId ? (
                     <>
                       <button

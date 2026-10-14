@@ -93,6 +93,21 @@ describe('managing members', () => {
     expect(Array.from(select.options).map((option) => option.value)).toEqual(['MEMBER']);
   });
 
+  it('shows a co-owner as a read-only badge, with no remove option, to a non-owner', () => {
+    // Dana is promoted to a second owner, and raj is granted MANAGE_MEMBERS without ever
+    // holding OWNER — the domain layer refuses raj changing or removing an owner, so the
+    // row should not offer a select or a Remove button that would only error.
+    teams.updateMemberRole(adminActor(), teamIdBySlug('platform'), danaActor().id, 'OWNER');
+    grant(adminActor(), teamIdBySlug('platform'), rajActor().id, ['MANAGE_MEMBERS']);
+
+    openTeam(rajActor().id);
+
+    expect(screen.queryByLabelText('Team role for Dana Diaz')).not.toBeInTheDocument();
+    const row = screen.getByText('Dana Diaz').closest('tr') as HTMLElement;
+    expect(within(row).getByText('OWNER')).toBeInTheDocument();
+    expect(within(row).queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument();
+  });
+
   it('explains why the last owner cannot be demoted', async () => {
     const { user } = openTeam(adminActor().id);
 
