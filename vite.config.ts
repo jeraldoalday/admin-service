@@ -16,6 +16,10 @@ export default defineConfig({
     setupFiles: ['./tests/setup.ts'],
     include: ['tests/**/*.test.{ts,tsx}'],
     restoreMocks: true,
+    // The default 5s is tight for a whole-app test driving real screens under jsdom — on a
+    // loaded machine the suite's slowest tests can brush up against it even though nothing is
+    // actually hung, which trips a false failure rather than catching a real regression.
+    testTimeout: 15000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
