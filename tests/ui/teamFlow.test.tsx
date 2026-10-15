@@ -108,6 +108,21 @@ describe('managing members', () => {
     expect(within(row).queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument();
   });
 
+  it('shows a co-admin as a read-only badge, with no remove option, to a caller who lacks every permission ADMIN carries', () => {
+    // Dana is already a team ADMIN on Platform (from the seed), and raj is granted
+    // MANAGE_MEMBERS without ever holding every permission ADMIN carries — the domain layer
+    // refuses raj changing or removing an admin, so the row should not offer a select or a
+    // Remove button that would only error.
+    grant(adminActor(), teamIdBySlug('platform'), rajActor().id, ['MANAGE_MEMBERS']);
+
+    openTeam(rajActor().id);
+
+    expect(screen.queryByLabelText('Team role for Dana Diaz')).not.toBeInTheDocument();
+    const row = screen.getByText('Dana Diaz').closest('tr') as HTMLElement;
+    expect(within(row).getByText('ADMIN')).toBeInTheDocument();
+    expect(within(row).queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument();
+  });
+
   it('explains why the last owner cannot be demoted', async () => {
     const { user } = openTeam(adminActor().id);
 

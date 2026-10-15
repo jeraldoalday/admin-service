@@ -74,8 +74,12 @@ export function MembersTab({
                 {/* Changing an owner's role away from OWNER is owner-only too, the mirror of
                     promoting someone into it: the domain layer refuses it for anyone else, so
                     a non-owner gets the read-only badge here instead of a select that only
-                    errors the moment they touch it. */}
-                {canManageMembers && !(member.role === 'OWNER' && !isOwner) ? (
+                    errors the moment they touch it. Changing an admin's role away from ADMIN
+                    needs every permission ADMIN carries by default, the mirror of promoting
+                    someone into it, so the same badge stands in for a caller who can't. */}
+                {canManageMembers &&
+                !(member.role === 'OWNER' && !isOwner) &&
+                !(member.role === 'ADMIN' && !canPromoteToAdmin) ? (
                   <select
                     aria-label={`Team role for ${member.displayName}`}
                     value={member.role}
@@ -110,6 +114,7 @@ export function MembersTab({
                 )}
                 {canManageMembers &&
                   !(member.role === 'OWNER' && !isOwner) &&
+                  !(member.role === 'ADMIN' && !canPromoteToAdmin) &&
                   (pendingRemoval === member.userId ? (
                     <>
                       <button
