@@ -454,6 +454,23 @@ export function updateMemberRole(
     }
   }
 
+  // The mirror of the ADMIN-promotion guard above: taking ADMIN's power away from someone is
+  // the same step up for whoever does it, over a peer they could not otherwise outrank.
+  // Without this, a MEMBER holding only a MANAGE_MEMBERS grant could demote a co-admin to
+  // MEMBER despite holding only one of the five permissions ADMIN carries by default — the
+  // same gap already closed around promoting someone into ADMIN in the first place.
+  if (membership.role === 'ADMIN' && role !== 'ADMIN') {
+    const actorPermissions = getOwnPermissions(actor, teamId).effectivePermissions;
+    const beyondActor = ROLE_DEFAULT_PERMISSIONS.ADMIN.filter(
+      (permission) => !actorPermissions.includes(permission),
+    );
+    if (beyondActor.length > 0) {
+      throw new ForbiddenError(
+        `You cannot change the role of an admin while missing a permission they hold by default: ${beyondActor.join(', ')}`,
+      );
+    }
+  }
+
   // The mirror of the OWNER-promotion guard above: stripping OWNER from someone is also a
   // step up in power for whoever does it, over anyone who was not already an OWNER. Without
   // this, a MEMBER holding only a MANAGE_MEMBERS grant could demote a co-owner to ADMIN or
@@ -508,6 +525,21 @@ export function removeMember(actor: Actor, teamId: string, targetUserId: string)
   if (!membership) {
     throw new NotFoundError('Team member not found');
   }
+  // Same guard as demoting an admin in updateMemberRole: removing one outright is another way
+  // to take their power away, and a MEMBER holding only a MANAGE_MEMBERS grant should no more
+  // be able to do that than to demote them in place.
+  if (membership.role === 'ADMIN') {
+    const actorPermissions = getOwnPermissions(actor, teamId).effectivePermissions;
+    const beyondActor = ROLE_DEFAULT_PERMISSIONS.ADMIN.filter(
+      (permission) => !actorPermissions.includes(permission),
+    );
+    if (beyondActor.length > 0) {
+      throw new ForbiddenError(
+        `You cannot remove an admin while missing a permission they hold by default: ${beyondActor.join(', ')}`,
+      );
+    }
+  }
+
   // Same guard as demoting an owner in updateMemberRole: removing one outright is another
   // way to take their power away, and a MEMBER holding only a MANAGE_MEMBERS grant should no
   // more be able to do that than to demote them in place.

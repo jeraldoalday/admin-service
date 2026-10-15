@@ -190,6 +190,51 @@ describe('member roles', () => {
 
     expect(() => teams.updateMemberRole(admin, platform, dana.id, 'ADMIN')).not.toThrow();
   });
+
+  it('refuses to let a member demote a co-admin on a MANAGE_MEMBERS grant alone', () => {
+    const platform = teamIdBySlug('platform');
+    const dana = danaActor();
+    const raj = rajActor();
+
+    // Dana is already a team ADMIN on Platform (from the seed), and raj is granted
+    // MANAGE_MEMBERS without ever holding every permission ADMIN carries — the mirror of the
+    // guard around promoting someone into ADMIN. Stripping an admin's power is the same step
+    // up as handing it out.
+    grant(adminActor(), platform, raj.id, ['MANAGE_MEMBERS']);
+
+    expect(() => teams.updateMemberRole(raj, platform, dana.id, 'MEMBER')).toThrow(
+      'You cannot change the role of an admin while missing a permission they hold by default',
+    );
+    expect(
+      teams.listTeamMembers(adminActor(), platform).items.find(
+        (member) => member.userId === dana.id,
+      )?.role,
+    ).toBe('ADMIN');
+  });
+
+  it('lets a member who holds every permission demote a co-admin', () => {
+    const platform = teamIdBySlug('platform');
+    const dana = danaActor();
+    const raj = rajActor();
+
+    grant(adminActor(), platform, raj.id, [
+      'MANAGE_TEAM',
+      'MANAGE_MEMBERS',
+      'MANAGE_INVITES',
+      'MANAGE_PERMISSIONS',
+      'MANAGE_API_KEYS',
+    ]);
+
+    expect(() => teams.updateMemberRole(raj, platform, dana.id, 'MEMBER')).not.toThrow();
+  });
+
+  it('lets an owner demote a co-admin', () => {
+    const admin = adminActor();
+    const platform = teamIdBySlug('platform');
+    const dana = danaActor();
+
+    expect(() => teams.updateMemberRole(admin, platform, dana.id, 'MEMBER')).not.toThrow();
+  });
 });
 
 describe('removing a member', () => {
@@ -228,6 +273,31 @@ describe('removing a member', () => {
     const dana = danaActor();
 
     teams.updateMemberRole(admin, platform, dana.id, 'OWNER');
+
+    expect(() => teams.removeMember(admin, platform, dana.id)).not.toThrow();
+  });
+
+  it('refuses to let a member remove a co-admin on a MANAGE_MEMBERS grant alone', () => {
+    const platform = teamIdBySlug('platform');
+    const dana = danaActor();
+    const raj = rajActor();
+
+    grant(adminActor(), platform, raj.id, ['MANAGE_MEMBERS']);
+
+    expect(() => teams.removeMember(raj, platform, dana.id)).toThrow(
+      'You cannot remove an admin while missing a permission they hold by default',
+    );
+    expect(
+      teams.listTeamMembers(adminActor(), platform).items.some(
+        (member) => member.userId === dana.id,
+      ),
+    ).toBe(true);
+  });
+
+  it('lets an owner remove a co-admin', () => {
+    const admin = adminActor();
+    const platform = teamIdBySlug('platform');
+    const dana = danaActor();
 
     expect(() => teams.removeMember(admin, platform, dana.id)).not.toThrow();
   });
