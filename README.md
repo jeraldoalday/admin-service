@@ -7,6 +7,8 @@ React application with no backend to stand up. The domain rules run in the brows
 in-memory store that mirrors itself into `localStorage`, so the whole console is explorable
 from `npm run dev` and the whole test suite runs from `npm test`.
 
+> **How this project is built:** I develop this app with AI coding agents. I decide what the permission and access rules should be, review each change and its tests, and merge what holds up.
+
 ## Stack
 
 - **Runtime**: Node.js 20+, TypeScript (strict mode)
