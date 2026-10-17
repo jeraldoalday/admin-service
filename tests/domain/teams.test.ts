@@ -206,9 +206,9 @@ describe('member roles', () => {
       'You cannot change the role of an admin while missing a permission they hold by default',
     );
     expect(
-      teams.listTeamMembers(adminActor(), platform).items.find(
-        (member) => member.userId === dana.id,
-      )?.role,
+      teams
+        .listTeamMembers(adminActor(), platform)
+        .items.find((member) => member.userId === dana.id)?.role,
     ).toBe('ADMIN');
   });
 
@@ -288,9 +288,9 @@ describe('removing a member', () => {
       'You cannot remove an admin while missing a permission they hold by default',
     );
     expect(
-      teams.listTeamMembers(adminActor(), platform).items.some(
-        (member) => member.userId === dana.id,
-      ),
+      teams
+        .listTeamMembers(adminActor(), platform)
+        .items.some((member) => member.userId === dana.id),
     ).toBe(true);
   });
 
