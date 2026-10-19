@@ -112,11 +112,6 @@ function getUserRecordOrThrow(id: string): UserRecord {
   return user;
 }
 
-export function getUser(actor: Actor, id: string): AdminUserView {
-  requireAdmin(actor);
-  return toAdminUserView(getUserRecordOrThrow(id));
-}
-
 export function updateUser(actor: Actor, id: string, rawInput: UpdateUserInput): AdminUserView {
   const admin = requireAdmin(actor);
   const input = parseInput(updateUserSchema, rawInput);
