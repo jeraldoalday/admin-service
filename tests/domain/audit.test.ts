@@ -82,6 +82,17 @@ describe('the audit log', () => {
     expect(audit.listAuditLogs(adminActor(), { from: tomorrow }).total).toBe(0);
   });
 
+  it('accepts a full timestamp as a boundary, read as the instant it names rather than widened', () => {
+    teams.updateTeam(adminActor(), teamIdBySlug('platform'), { name: 'Renamed' });
+
+    const justBefore = new Date(Date.now() - 1000).toISOString();
+    const justAfter = new Date(Date.now() + 1000).toISOString();
+
+    expect(audit.listAuditLogs(adminActor(), { from: justBefore, to: justAfter }).total).toBe(1);
+    expect(audit.listAuditLogs(adminActor(), { from: justAfter }).total).toBe(0);
+    expect(audit.listAuditLogs(adminActor(), { to: justBefore }).total).toBe(4); // the seeded backdated entries
+  });
+
   it('combines a date range with the other filters', () => {
     const admin = adminActor();
     teams.updateTeam(admin, teamIdBySlug('platform'), { name: 'Renamed' });
