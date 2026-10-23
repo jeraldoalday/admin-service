@@ -33,6 +33,14 @@ describe('creating a team', () => {
   it('rejects a blank name', () => {
     expect(() => teams.createTeam(miraActor(), { name: '   ' })).toThrow();
   });
+
+  it('falls back to a generic slug when the name has nothing a slug can be made of', () => {
+    // Not blank - it clears the "name is required" check - but every character is stripped by
+    // the slugifier, which would otherwise leave the team with an empty slug.
+    const team = teams.createTeam(miraActor(), { name: '🎉🎉🎉' });
+
+    expect(team.slug).toBe('team');
+  });
 });
 
 describe('team visibility', () => {
