@@ -439,6 +439,41 @@ describe('invites', () => {
     expect(audit.listAuditLogs(adminActor(), { action: 'team.invite.revoked' }).total).toBe(0);
   });
 
+  it('refuses to revoke an invite already settled as expired, without writing to it again', () => {
+    const admin = adminActor();
+    const platform = teamIdBySlug('platform');
+    const invite = teams.createInvite(admin, platform, { email: 'already-settled@example.com' });
+
+    const stored = getDatabase().invites.find((candidate) => candidate.id === invite.id);
+    if (stored) stored.expiresAt = new Date(Date.now() - 1000).toISOString();
+    // Unlike the lazily-expired case above, the row is already settled as EXPIRED before
+    // revokeInvite ever sees it - the sweep, or an earlier read, got there first.
+    teams.expireStaleInvites();
+    expect(getDatabase().invites.find((row) => row.id === invite.id)?.status).toBe('EXPIRED');
+
+    expect(() => teams.revokeInvite(admin, platform, invite.id)).toThrow(
+      'This invite has already expired',
+    );
+    expect(getDatabase().invites.find((row) => row.id === invite.id)?.status).toBe('EXPIRED');
+  });
+
+  it('refuses to accept an invite already settled as expired, without writing to it again', () => {
+    const admin = adminActor();
+    const platform = teamIdBySlug('platform');
+    const invitee = createUser('already-settled-accept@example.com', 'Settled');
+    const invite = teams.createInvite(admin, platform, {
+      email: 'already-settled-accept@example.com',
+    });
+
+    const stored = getDatabase().invites.find((candidate) => candidate.id === invite.id);
+    if (stored) stored.expiresAt = new Date(Date.now() - 1000).toISOString();
+    teams.expireStaleInvites();
+    expect(getDatabase().invites.find((row) => row.id === invite.id)?.status).toBe('EXPIRED');
+
+    expect(() => teams.acceptInvite(invitee, invite.token)).toThrow('This invite has expired');
+    expect(getDatabase().invites.find((row) => row.id === invite.id)?.status).toBe('EXPIRED');
+  });
+
   it('revokes only pending invites', () => {
     const admin = adminActor();
     const platform = teamIdBySlug('platform');
