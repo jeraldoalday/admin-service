@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useActor } from '@/app/sessionContext';
 import { useLiveQuery } from '@/app/store';
 import { DataTable, Pagination } from '@/components/DataTable';
@@ -44,6 +44,16 @@ export function ApiKeysTab({ teamId }: { teamId: string }): ReactNode {
   const [expiresAt, setExpiresAt] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [issuedSecret, setIssuedSecret] = useState<{ label: string; secret: string } | null>(null);
+  // Confirms a click on "Copy secret" the same way InvitesTab confirms its own clipboard
+  // copies, since a secret shown only once gives no other feedback that the click landed.
+  const [secretCopied, setSecretCopied] = useState(false);
+  const secretCopyTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (secretCopyTimeoutRef.current !== null) window.clearTimeout(secretCopyTimeoutRef.current);
+    };
+  }, []);
 
   const result = useLiveQuery(() =>
     apiKeysApi.listApiKeys(actor, teamId, {
@@ -82,6 +92,7 @@ export function ApiKeysTab({ teamId }: { teamId: string }): ReactNode {
         ...(expiresAt ? { expiresAt } : {}),
       });
       setIssuedSecret({ label: `Key "${created.apiKey.name}" created`, secret: created.secret });
+      setSecretCopied(false);
       setName('');
       setScopes([]);
       setExpiresAt('');
@@ -109,9 +120,24 @@ export function ApiKeysTab({ teamId }: { teamId: string }): ReactNode {
         label: `Key "${rotated.apiKey.name}" rotated — the previous secret no longer works`,
         secret: rotated.secret,
       });
+      setSecretCopied(false);
     } catch (caught) {
       setError(toErrorMessage(caught));
     }
+  }
+
+  function copySecret(secret: string): void {
+    navigator.clipboard
+      ?.writeText?.(secret)
+      .then(() => {
+        setSecretCopied(true);
+        if (secretCopyTimeoutRef.current !== null) window.clearTimeout(secretCopyTimeoutRef.current);
+        secretCopyTimeoutRef.current = window.setTimeout(() => setSecretCopied(false), 1500);
+      })
+      .catch(() => {
+        // Clipboard access is denied in plenty of contexts; the secret is still shown for
+        // manual copying, same as InvitesTab's own clipboard copy falls back.
+      });
   }
 
   return (
@@ -173,7 +199,14 @@ export function ApiKeysTab({ teamId }: { teamId: string }): ReactNode {
       {issuedSecret && (
         <SuccessNotice>
           {issuedSecret.label}. Copy the secret now — it is shown once and only its hash is stored:{' '}
-          <code className="secret">{issuedSecret.secret}</code>
+          <code className="secret">{issuedSecret.secret}</code>{' '}
+          <button
+            type="button"
+            className="button button--ghost"
+            onClick={() => copySecret(issuedSecret.secret)}
+          >
+            {secretCopied ? 'Copied' : 'Copy secret'}
+          </button>
         </SuccessNotice>
       )}
 

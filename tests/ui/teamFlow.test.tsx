@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import { apiKeys, getDatabase, teams } from '@/domain';
 import {
@@ -307,6 +307,25 @@ describe('API keys', () => {
     expect(banner).toHaveTextContent('Copy the secret now');
     expect(secret).toBeDefined();
     expect(within(screen.getByRole('table')).getByText('deploy-bot')).toBeInTheDocument();
+  });
+
+  it('copies the newly issued secret to the clipboard and confirms it', async () => {
+    const { user } = openTeam(adminActor().id);
+    // Defined after openTeam's own userEvent.setup(), which installs its own clipboard stub
+    // that would otherwise clobber this mock.
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+
+    await user.click(screen.getByRole('button', { name: 'API keys' }));
+    await user.type(screen.getByLabelText('Key name'), 'deploy-bot');
+    await user.click(screen.getByRole('button', { name: 'Create key' }));
+
+    const banner = await screen.findByRole('status');
+    const secret = banner.querySelector('code.secret')?.textContent;
+    await user.click(within(banner).getByRole('button', { name: 'Copy secret' }));
+
+    expect(writeText).toHaveBeenCalledWith(secret);
+    expect(await within(banner).findByRole('button', { name: 'Copied' })).toBeInTheDocument();
   });
 
   it('only offers scopes the caller holds themselves when minting a key', async () => {
