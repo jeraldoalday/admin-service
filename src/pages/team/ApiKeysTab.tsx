@@ -131,7 +131,8 @@ export function ApiKeysTab({ teamId }: { teamId: string }): ReactNode {
       ?.writeText?.(secret)
       .then(() => {
         setSecretCopied(true);
-        if (secretCopyTimeoutRef.current !== null) window.clearTimeout(secretCopyTimeoutRef.current);
+        if (secretCopyTimeoutRef.current !== null)
+          window.clearTimeout(secretCopyTimeoutRef.current);
         secretCopyTimeoutRef.current = window.setTimeout(() => setSecretCopied(false), 1500);
       })
       .catch(() => {
