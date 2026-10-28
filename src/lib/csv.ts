@@ -7,15 +7,18 @@
 
 /**
  * Quotes a single field per RFC 4180. A field is wrapped when it contains a delimiter, a
- * quote, or a newline, and embedded quotes are doubled. A leading `=`, `+`, `-` or `@` is
- * additionally prefixed with a quote character, because spreadsheet applications otherwise
- * read the value as a formula - a field like `=1+1` is data here, not arithmetic.
+ * quote, or a newline, and embedded quotes are doubled. A leading `=`, `+`, `-`, `@`, tab, or
+ * carriage return is additionally prefixed with a quote character, because spreadsheet
+ * applications otherwise read the value as a formula - a field like `=1+1` is data here, not
+ * arithmetic. Tab and carriage return are included alongside the arithmetic operators per the
+ * OWASP CSV injection guidance, since some spreadsheet parsers skip leading whitespace before
+ * looking for a formula trigger.
  */
 export function escapeCsvField(value: unknown): string {
   if (value === null || value === undefined) return '';
 
   const raw = typeof value === 'string' ? value : JSON.stringify(value);
-  const guarded = /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
+  const guarded = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
 
   if (/["\n\r,]/.test(guarded)) {
     return `"${guarded.replace(/"/g, '""')}"`;

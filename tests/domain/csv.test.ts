@@ -26,6 +26,14 @@ describe('escapeCsvField', () => {
     expect(escapeCsvField('=SUM(A1:A9)')).toBe("'=SUM(A1:A9)");
     expect(escapeCsvField('+1 555 0100')).toBe("'+1 555 0100");
   });
+
+  it('defuses a leading tab or carriage return the same way, per OWASP guidance', () => {
+    // Some spreadsheet parsers skip leading whitespace before checking for a formula
+    // trigger, so a value starting with one of these must be guarded too.
+    expect(escapeCsvField('\t=SUM(A1:A9)')).toBe("'\t=SUM(A1:A9)");
+    // The carriage return itself still needs the usual RFC 4180 quoting on top of the guard.
+    expect(escapeCsvField('\r=SUM(A1:A9)')).toBe('"\'\r=SUM(A1:A9)"');
+  });
 });
 
 describe('toCsv', () => {
