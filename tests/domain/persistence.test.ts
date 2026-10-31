@@ -54,6 +54,17 @@ describe('persistence', () => {
     expect(attachStorage(window.localStorage)).toBe(false);
   });
 
+  it('discards valid JSON that is not a database object', () => {
+    // `JSON.parse` succeeds on these, so the rejection has to come from the shape check
+    // rather than the parse failing — the case a plain string, number, or null in storage
+    // would hit if something other than this app ever wrote to the key.
+    window.localStorage.setItem(STORAGE_KEY, '42');
+    expect(attachStorage(window.localStorage)).toBe(false);
+
+    window.localStorage.setItem(STORAGE_KEY, 'null');
+    expect(attachStorage(window.localStorage)).toBe(false);
+  });
+
   it('keeps running when storage refuses to accept writes', () => {
     const failing = {
       getItem: () => null,
