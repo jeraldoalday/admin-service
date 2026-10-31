@@ -219,35 +219,39 @@ export function UsersPage(): ReactNode {
                   >
                     Edit
                   </button>
-                  {pendingDelete === user.id ? (
-                    <>
-                      <button
-                        type="button"
-                        className="button button--danger"
-                        onClick={() => handleDelete(user.id)}
-                      >
-                        Confirm delete
-                      </button>
+                  {/* The domain refuses to delete your own account, the mirror of the role and
+                      active-flag guards in the edit dialog below — there is no reason to offer
+                      a control that only errors. */}
+                  {user.id !== actor.id &&
+                    (pendingDelete === user.id ? (
+                      <>
+                        <button
+                          type="button"
+                          className="button button--danger"
+                          onClick={() => handleDelete(user.id)}
+                        >
+                          Confirm delete
+                        </button>
+                        <button
+                          type="button"
+                          className="button button--ghost"
+                          onClick={() => setPendingDelete(null)}
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
                       <button
                         type="button"
                         className="button button--ghost"
-                        onClick={() => setPendingDelete(null)}
+                        onClick={() => {
+                          setPendingDelete(user.id);
+                          setError(null);
+                        }}
                       >
-                        Cancel
+                        Delete
                       </button>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      className="button button--ghost"
-                      onClick={() => {
-                        setPendingDelete(user.id);
-                        setError(null);
-                      }}
-                    >
-                      Delete
-                    </button>
-                  )}
+                    ))}
                 </td>
               </tr>
             ))}

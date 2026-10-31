@@ -127,15 +127,15 @@ describe('the users screen', () => {
     expect(users.listUsers(adminActor()).total).toBe(4);
   });
 
-  it('reports a refused deletion instead of failing silently', async () => {
-    const { user } = renderAsAdmin();
+  it('does not offer to delete your own account', () => {
+    renderAsAdmin();
 
-    await user.click(within(rowFor('Avery Admin')).getByRole('button', { name: 'Delete' }));
-    await user.click(screen.getByRole('button', { name: 'Confirm delete' }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Admins cannot delete their own account',
-    );
+    // The domain refuses to delete your own account, the same guard the edit dialog's
+    // disabled role control reflects above, so there is no reason to offer a Delete button
+    // that would only error.
+    expect(
+      within(rowFor('Avery Admin')).queryByRole('button', { name: 'Delete' }),
+    ).not.toBeInTheDocument();
   });
 });
 
