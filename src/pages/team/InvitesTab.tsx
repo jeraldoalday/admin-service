@@ -20,7 +20,13 @@ const STATUS_TONES: Record<InviteStatus, 'positive' | 'neutral' | 'warning' | 'd
   EXPIRED: 'warning',
 };
 
-export function InvitesTab({ teamId }: { teamId: string }): ReactNode {
+export function InvitesTab({
+  teamId,
+  canPromoteToAdmin,
+}: {
+  teamId: string;
+  canPromoteToAdmin: boolean;
+}): ReactNode {
   const actor = useActor();
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<'all' | InviteStatus>('all');
@@ -92,7 +98,11 @@ export function InvitesTab({ teamId }: { teamId: string }): ReactNode {
             onChange={(event) => setRole(event.target.value as Exclude<TeamRole, 'OWNER'>)}
           >
             <option value="MEMBER">MEMBER</option>
-            <option value="ADMIN">ADMIN</option>
+            {/* The domain refuses an invite addressed at ADMIN unless the inviter already
+                holds every permission that role carries by default — the same guard
+                MembersTab's own role select applies to promoting someone in place. There is
+                no reason to offer an option that only errors. */}
+            {canPromoteToAdmin && <option value="ADMIN">ADMIN</option>}
           </select>
         </Field>
         <button type="submit" className="button button--primary">

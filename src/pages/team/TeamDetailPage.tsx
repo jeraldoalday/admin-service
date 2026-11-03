@@ -102,7 +102,12 @@ export function TeamDetailPage(): ReactNode {
             canPromoteToAdmin={ROLE_DEFAULT_PERMISSIONS.ADMIN.every(can)}
           />
         )}
-        {activeTab === 'Invites' && <InvitesTab teamId={teamId} />}
+        {activeTab === 'Invites' && (
+          <InvitesTab
+            teamId={teamId}
+            canPromoteToAdmin={ROLE_DEFAULT_PERMISSIONS.ADMIN.every(can)}
+          />
+        )}
         {activeTab === 'API keys' && <ApiKeysTab teamId={teamId} />}
         {activeTab === 'Activity' && <ActivityTab teamId={teamId} />}
         {activeTab === 'Settings' && (

@@ -239,6 +239,25 @@ describe('invites', () => {
     const table = within(screen.getByRole('table'));
     expect(await table.findByText('REVOKED')).toBeInTheDocument();
   });
+
+  it('offers ADMIN as an invite role to an owner', async () => {
+    const { user } = openTeam(adminActor().id);
+    await user.click(screen.getByRole('button', { name: 'Invites' }));
+
+    const options = within(screen.getByLabelText('Team role')).getAllByRole('option');
+    expect(options.map((option) => option.textContent)).toEqual(['MEMBER', 'ADMIN']);
+  });
+
+  it('hides ADMIN as an invite role from a member holding only MANAGE_INVITES', async () => {
+    // The domain refuses to let Raj invite someone as ADMIN — he holds MANAGE_INVITES but
+    // none of the other permissions that role carries by default — so the option offering
+    // it should not be there to error on in the first place.
+    const { user } = openTeam(rajActor().id);
+    await user.click(screen.getByRole('button', { name: 'Invites' }));
+
+    const options = within(screen.getByLabelText('Team role')).getAllByRole('option');
+    expect(options.map((option) => option.textContent)).toEqual(['MEMBER']);
+  });
 });
 
 describe('accepting an invite', () => {
