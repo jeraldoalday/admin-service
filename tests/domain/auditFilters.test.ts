@@ -42,6 +42,14 @@ describe('filtering the log by actor', () => {
     expect(orphaned?.label).toBe(departing.id);
     expect(audit.listAuditLogs(adminActor(), { actorId: departing.id }).total).toBeGreaterThan(0);
   });
+
+  it('leaves a system-attributed entry out of the actor options, not standing in for a person', () => {
+    const before = audit.listAuditActors(adminActor());
+
+    audit.recordAuditLog({ actorId: null, action: 'system.swept', targetType: 'test' });
+
+    expect(audit.listAuditActors(adminActor())).toEqual(before);
+  });
 });
 
 describe('searching the log', () => {
@@ -198,6 +206,20 @@ describe("a team's own activity", () => {
     const actors = audit.listTeamActivityActors(danaActor(), growth);
 
     expect(actors).toEqual([{ id: danaActor().id, label: 'Dana Diaz (dana@example.com)' }]);
+  });
+
+  it('leaves a system-attributed entry out of a team activity actor list too', () => {
+    const growth = teamIdBySlug('growth');
+    const before = audit.listTeamActivityActors(danaActor(), growth);
+
+    audit.recordAuditLog({
+      actorId: null,
+      action: 'system.swept',
+      targetType: 'test',
+      teamId: growth,
+    });
+
+    expect(audit.listTeamActivityActors(danaActor(), growth)).toEqual(before);
   });
 
   it('offers the actions present in this team and no others', () => {
